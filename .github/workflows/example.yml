@@ -14,20 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: cachix/install-nix-action@v25
-
-      - uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - run: git clone https://github.com/Golem-Base/rust-sdk.git
-
-      - run: cargo build -p golem-base-cli
-        working-directory: ./rust-sdk
-
-      - run: mkdir -p ./bin && cp ./rust-sdk/target/debug/golem-base-cli ./bin/
-
-      - run: chmod +x ./bin/golem-base-cli
+      - uses: cachix/install-nix-action@v31
 
       - uses: actions/setup-go@v5
         with:
@@ -40,14 +27,18 @@ jobs:
       - run: docker-compose up -d
         working-directory: ./golembase-op-geth
 
-      - run: ./bin/golem-base-cli wait-sync --timeout 120
-
-      - run: echo "$HOME/go/bin" >> $GITHUB_PATH
+      - run: |
+          go install github.com/Golem-Base/golembase-demo-cli@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - run: |
-          ./bin/golem-base-cli account create --raw
-          ./bin/golem-base-cli account list
-          ./bin/golem-base-cli account fund --amount 2
+          ADDRESS=$(golembase-demo-cli account create | grep -oE '0x[a-fA-F0-9]{40}')
+          echo "ADDRESS=$ADDRESS" >> $GITHUB_ENV
+
+      - run: |
+          curl 'https://faucet.golembase.demo.golem-base.io/api/faucet' \
+            -H 'Content-Type: application/json' \
+            --data-raw "{\"address\":\"$ADDRESS\"}"
 
       - run: nix build .#golem-base-sdk-example --no-write-lock-file
         working-directory: ./example
