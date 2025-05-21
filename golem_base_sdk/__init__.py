@@ -5,21 +5,17 @@ import base64
 import logging
 import logging.config
 import typing
-from dataclasses import dataclass
 from typing import (
     AsyncGenerator,
     Awaitable,
     Callable,
     Iterable,
     List,
-    NewType,
     Optional,
     Sequence,
     Set,
-    override,
 )
 
-import rlp
 from eth_typing import ChecksumAddress, HexStr
 from web3 import AsyncWeb3, WebSocketProvider
 from web3.contract import AsyncContract
@@ -32,290 +28,61 @@ from web3.utils.subscriptions import (
     LogsSubscriptionContext,
 )
 
+from .constants import (
+    GOLEM_BASE_ABI,
+    STORAGE_ADDRESS,
+)
+from .types import (
+    Address,
+    Annotation,
+    CreateEntityReturnType,
+    EntityKey,
+    EntityMetadata,
+    ExtendEntityReturnType,
+    GenericBytes,
+    GolemBaseCreate,
+    GolemBaseDelete,
+    GolemBaseExtend,
+    GolemBaseTransaction,
+    GolemBaseTransactionReceipt,
+    GolemBaseUpdate,
+    QueryEntitiesResult,
+    UpdateEntityReturnType,
+)
+from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
+
+
 __version__ = "0.0.2"
 
 
-@dataclass(frozen=True)
-class GenericBytes:
-    """
-    GenericBytes
-    """
-
-    generic_bytes: bytes
-
-    def as_hex_string(self) -> str:
-        """
-        as_hex_string
-        """
-        return "0x" + self.generic_bytes.hex()
-
-    def as_address(self) -> ChecksumAddress:
-        """
-        as_address
-        """
-        return AsyncWeb3.to_checksum_address(self.as_hex_string())
-
-    @override
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.as_hex_string()})"
-
-    @staticmethod
-    def from_hex_string(hexstr: str) -> "GenericBytes":
-        """
-        from_hex_string
-        """
-        assert hexstr.startswith("0x")
-        assert len(hexstr) % 2 == 0
-
-        return GenericBytes(bytes.fromhex(hexstr[2:]))
-
-
-EntityKey = NewType("EntityKey", GenericBytes)
-Address = NewType("Address", GenericBytes)
-
-INSTANCE_URLS = {
-    "demo": {
-        "rpc": "https://api.golembase.demo.golem-base.io",
-    },
-    "local": {
-        "rpc": "http://localhost:8545",
-    },
-    "kaolin": {
-        "rpc": "https://rpc.kaolin.holesky.golem-base.io",
-        "ws": "wss://ws.rpc.kaolin.holesky.golem-base.io",
-    },
-}
-
-STORAGE_ADDRESS: Address = Address(
-    GenericBytes.from_hex_string("0x0000000000000000000000000000000060138453")
-)
-
-GOLEM_BASE_ABI = [
-    {
-        "anonymous": False,
-        "inputs": [
-            {"indexed": True, "name": "entityKey", "type": "uint256"},
-            {"indexed": False, "name": "expirationBlock", "type": "uint256"},
-        ],
-        "name": "GolemBaseStorageEntityCreated",
-        "type": "event",
-    },
-    {
-        "anonymous": False,
-        "inputs": [
-            {"indexed": True, "name": "entityKey", "type": "uint256"},
-            {"indexed": False, "name": "expirationBlock", "type": "uint256"},
-        ],
-        "name": "GolemBaseStorageEntityUpdated",
-        "type": "event",
-    },
-    {
-        "anonymous": False,
-        "inputs": [{"indexed": True, "name": "entityKey", "type": "uint256"}],
-        "name": "GolemBaseStorageEntityDeleted",
-        "type": "event",
-    },
-    {
-        "anonymous": False,
-        "inputs": [
-            {"indexed": True, "name": "entityKey", "type": "uint256"},
-            {"indexed": False, "name": "oldExpirationBlock", "type": "uint256"},
-            {"indexed": False, "name": "newExpirationBlock", "type": "uint256"},
-        ],
-        "name": "GolemBaseStorageEntityBTLExtended",
-        "type": "event",
-    },
-    # Old ABI event that has a typo in the name and a missing non-indexed argument.
-    # This can be removed once we retire the kaolin network (the only one using this event hash).
-    {
-        "anonymous": False,
-        "inputs": [
-            {"indexed": True, "name": "entityKey", "type": "uint256"},
-            {"indexed": False, "name": "expirationBlock", "type": "uint256"},
-        ],
-        "name": "GolemBaseStorageEntityBTLExptended",
-        "type": "event",
-    },
-    # Old ABI before rename of TTL -> BTL
-    {
-        "anonymous": False,
-        "inputs": [
-            {"indexed": True, "name": "entityKey", "type": "uint256"},
-            {"indexed": False, "name": "expirationBlock", "type": "uint256"},
-        ],
-        "name": "GolemBaseStorageEntityTTLExptended",
-        "type": "event",
-    },
-]
-
-
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Annotation[V]:
-    """
-    Annotation
-    """
-
-    key: str
-    value: V
-
-    @override
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.key} -> {self.value})"
-
-
-@dataclass(frozen=True)
-class GolemBaseCreate:
-    """
-    GolemBaseCreate
-    """
-
-    data: bytes
-    ttl: int
-    string_annotations: Sequence[Annotation[str]]
-    numeric_annotations: Sequence[Annotation[int]]
-
-
-@dataclass(frozen=True)
-class GolemBaseUpdate:
-    """
-    GolemBaseUpdate
-    """
-
-    entity_key: EntityKey
-    data: bytes
-    ttl: int
-    string_annotations: Sequence[Annotation[str]]
-    numeric_annotations: Sequence[Annotation[int]]
-
-
-@dataclass(frozen=True)
-class GolemBaseDelete:
-    """
-    GolemBaseDelete
-    """
-
-    entity_key: EntityKey
-
-
-@dataclass(frozen=True)
-class GolemBaseExtend:
-    """
-    GolemBaseExtend
-    """
-
-    entity_key: EntityKey
-    number_of_blocks: int
-
-
-@dataclass(frozen=True)
-class GolemBaseTransaction:
-    """
-    GolemBaseTransaction
-    """
-
-    def __init__(
-        self,
-        creates: Optional[Sequence[GolemBaseCreate]] = None,
-        updates: Optional[Sequence[GolemBaseUpdate]] = None,
-        deletes: Optional[Sequence[GolemBaseDelete]] = None,
-        extensions: Optional[Sequence[GolemBaseExtend]] = None,
-    ):
-        object.__setattr__(self, "creates", creates or [])
-        object.__setattr__(self, "updates", updates or [])
-        object.__setattr__(self, "deletes", deletes or [])
-        object.__setattr__(self, "extensions", extensions or [])
-
-    creates: Sequence[GolemBaseCreate]
-    updates: Sequence[GolemBaseUpdate]
-    deletes: Sequence[GolemBaseDelete]
-    extensions: Sequence[GolemBaseExtend]
-
-
-@dataclass(frozen=True)
-class CreateEntityReturnType:
-    """
-    CreateEntityReturnType
-    """
-
-    expiration_block: int
-    entity_key: EntityKey
-
-
-@dataclass(frozen=True)
-class UpdateEntityReturnType:
-    """
-    UpdateEntityReturnType
-    """
-
-    expiration_block: int
-    entity_key: EntityKey
-
-
-@dataclass(frozen=True)
-class ExtendEntityReturnType:
-    """
-    ExtendEntityReturnType
-    """
-
-    old_expiration_block: int
-    new_expiration_block: int
-    entity_key: EntityKey
-
-
-@dataclass(frozen=True)
-class GolemBaseTransactionReceipt:
-    """
-    GolemBaseTransactionReceipt
-    """
-
-    creates: Sequence[CreateEntityReturnType]
-    updates: Sequence[UpdateEntityReturnType]
-    extensions: Sequence[ExtendEntityReturnType]
-    deletes: Sequence[EntityKey]
-
-
-@dataclass(frozen=True)
-class EntityMetadata:
-    """
-    EntityMetadata
-    """
-
-    entity_key: EntityKey
-    owner: Address
-    expires_at_block: int
-    string_annotations: Sequence[Annotation[str]]
-    numeric_annotations: Sequence[Annotation[int]]
-
-
-@dataclass(frozen=True)
-class QueryEntitiesResult:
-    """
-    QueryEntitiesResult
-    """
-
-    entity_key: EntityKey
-    storage_value: bytes
+"""
+@private
+"""
 
 
 class GolemBaseClient:
     """
-    GolemBaseClient
+    The Golem Base client used to interact with Golem Base.
+    Many useful methods are implemented directly on this type, while more
+    generic ethereum methods can be accessed through the underlying
+    web3 client that you can access with the
+    `GolemBaseClient.http_client()`
+    method.
     """
 
     _http_client: AsyncWeb3
     _ws_client: AsyncWeb3
-    golem_base_contract: AsyncContract
-    background_tasks: Set[asyncio.Task]
+    _golem_base_contract: AsyncContract
+    _background_tasks: Set[asyncio.Task]
 
     @staticmethod
     async def create(
         rpc_url: str, ws_url: str, private_key: Sequence[bytes]
     ) -> "GolemBaseClient":
         """
-        create: async constructor
+        Static method to create a `GolemBaseClient` instance,
+        this is the preferred method to create an instance.
         """
         ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
         return GolemBaseClient(rpc_url, ws_client, private_key)
@@ -323,11 +90,11 @@ class GolemBaseClient:
     def __init__(
         self, rpc_url: str, ws_client: AsyncWeb3, private_key: Sequence[bytes]
     ) -> None:
-        self._http_client = GolemBaseClient.__create_client(rpc_url)
+        self._http_client = GolemBaseClient._create_client(rpc_url)
         self._ws_client = ws_client
 
         # Keep references to async tasks we created
-        self.background_tasks = set()
+        self._background_tasks = set()
 
         def is_connected(client) -> Callable[[bool], Awaitable[bool]]:
             async def inner(show_traceback: bool) -> bool:
@@ -388,10 +155,7 @@ class GolemBaseClient:
             )
 
     @staticmethod
-    def __create_client(rpc_url: str) -> AsyncWeb3:
-        """
-        create_client
-        """
+    def _create_client(rpc_url: str) -> AsyncWeb3:
         client = AsyncWeb3(
             AsyncWeb3.AsyncHTTPProvider(rpc_url, request_kwargs={"timeout": 60}),
         )
@@ -431,25 +195,26 @@ class GolemBaseClient:
 
     def http_client(self):
         """
-        http_client
+        Get the underlying web3 http client
         """
         return self._http_client
 
     def ws_client(self) -> AsyncWeb3:
         """
-        ws_client
+        Get the underlying web3 websocket client
         """
         return self._ws_client
 
     async def is_connected(self) -> bool:
         """
-        is_connected
+        Check whether the client's underlying http client is connected
         """
         return await self.http_client().is_connected()
 
     async def disconnect(self) -> None:
         """
-        disconnect
+        Disconnect both the underlying http and ws clients and
+        unsubscribe from all subscriptions
         """
         await self.http_client().provider.disconnect()
         await self.ws_client().subscription_manager.unsubscribe_all()
@@ -457,13 +222,14 @@ class GolemBaseClient:
 
     def get_account_address(self) -> ChecksumAddress:
         """
-        get_account_address
+        Get the address associated with the private key that this client
+        was created with
         """
         return self.account.address
 
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """
-        get_storage_value
+        Get the storage value stored in the given entity
         """
         return base64.b64decode(
             await self.http_client().eth.get_storage_value(entity_key.as_hex_string())
@@ -471,7 +237,7 @@ class GolemBaseClient:
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
         """
-        get_entity_metadata
+        Get the metadata of the given entity
         """
         metadata = await self.http_client().eth.get_entity_metadata(
             entity_key.as_hex_string()
@@ -499,7 +265,7 @@ class GolemBaseClient:
         self, block_number: int
     ) -> Iterable[EntityKey]:
         """
-        get_entities_to_expire_at_block
+        Get all entities that will expire at the given block
         """
         return list(
             map(
@@ -512,13 +278,13 @@ class GolemBaseClient:
 
     async def get_entity_count(self) -> int:
         """
-        get_entity_count
+        Get the total entity count in Golem Base
         """
         return await self.http_client().eth.get_entity_count()
 
     async def get_all_entity_keys(self) -> Sequence[EntityKey]:
         """
-        get_entity_keys
+        Get all entity keys in Golem Base
         """
         return list(
             map(
@@ -529,7 +295,7 @@ class GolemBaseClient:
 
     async def get_entities_of_owner(self, owner: Address) -> Sequence[EntityKey]:
         """
-        get_entities_of_owner
+        Get all the entities owned by the given address
         """
         return list(
             map(
@@ -542,7 +308,7 @@ class GolemBaseClient:
 
     async def query_entities(self, query: str) -> Sequence[QueryEntitiesResult]:
         """
-        query_entities
+        Get all entities that satisfy the given Golem Base query
         """
         return list(
             map(
@@ -553,14 +319,12 @@ class GolemBaseClient:
             )
         )
 
-    # remaining 3 RPC methods
-
     async def create_entities(
         self,
         creates: Sequence[GolemBaseCreate],
     ) -> Iterable[CreateEntityReturnType]:
         """
-        create_entities
+        Create entities in Golem Base
         """
         return (await self.send_transaction(creates=creates)).creates
 
@@ -569,7 +333,7 @@ class GolemBaseClient:
         updates: Sequence[GolemBaseUpdate],
     ) -> Iterable[UpdateEntityReturnType]:
         """
-        update_entities
+        Update entities in Golem Base
         """
         return (await self.send_transaction(updates=updates)).updates
 
@@ -578,7 +342,7 @@ class GolemBaseClient:
         deletes: Sequence[GolemBaseDelete],
     ) -> Iterable[EntityKey]:
         """
-        delete_entities
+        Delete entities from Golem Base
         """
         return (await self.send_transaction(deletes=deletes)).deletes
 
@@ -587,7 +351,7 @@ class GolemBaseClient:
         extensions: Sequence[GolemBaseExtend],
     ) -> Iterable[ExtendEntityReturnType]:
         """
-        extend_entities
+        Extend the BTL of entities in Golem Base
         """
         return (await self.send_transaction(extensions=extensions)).extensions
 
@@ -599,7 +363,9 @@ class GolemBaseClient:
         extensions: Optional[Sequence[GolemBaseExtend]] = None,
     ) -> GolemBaseTransactionReceipt:
         """
-        send_transaction
+        Send a generic transaction to Golem Base.
+        This transaction can contain multiple create, update, delete and
+        extend operations
         """
         tx = GolemBaseTransaction(
             creates,
@@ -607,9 +373,9 @@ class GolemBaseClient:
             deletes,
             extensions,
         )
-        return await self.__send_gb_transaction(tx)
+        return await self._send_gb_transaction(tx)
 
-    async def __process_golem_base_log_receipt(
+    async def _process_golem_base_log_receipt(
         self,
         log_receipt: LogReceipt,
     ) -> GolemBaseTransactionReceipt:
@@ -676,35 +442,7 @@ class GolemBaseClient:
                 "GolemBaseStorageEntityBTLExptended"
                 | "GolemBaseStorageEntityTTLExptended"
             ):
-                # For these types, the type signature in the ABI does
-                # not correspond to the actual data returned, so we need
-                # to parse the data ourselves.
-                def parse_log(log_receipt: LogReceipt) -> ExtendEntityReturnType:
-                    # pylint: disable=line-too-long
-                    # Take the first 64 bytes by masking the rest
-                    # (shift 1 to the left 256 positions, then negate the number)
-                    # Example:
-                    # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 012f
-                    #    0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0143
-                    # mask this with:
-                    # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
-                    #    1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111
-                    # to obtain 0x143
-                    # and then shift the original number to the right
-                    # by 256 to obtain 0x12f
-                    data_parsed = int.from_bytes(
-                        log_receipt["data"], byteorder="big", signed=False
-                    )
-                    new_expiration_block = data_parsed & ((1 << 256) - 1)
-                    old_expiration_block = data_parsed >> 256
-
-                    return ExtendEntityReturnType(
-                        old_expiration_block=old_expiration_block,
-                        new_expiration_block=new_expiration_block,
-                        entity_key=EntityKey(GenericBytes(log_receipt["topics"][1])),
-                    )
-
-                extensions.append(parse_log(log_receipt))
+                extensions.append(parse_legacy_btl_extended_log(log_receipt))
             case other:
                 raise ValueError(f"Unknown event type: {other}")
 
@@ -715,7 +453,7 @@ class GolemBaseClient:
             extensions=extensions,
         )
 
-    async def __process_golem_base_receipt(
+    async def _process_golem_base_receipt(
         self, receipt: TxReceipt
     ) -> GolemBaseTransactionReceipt:
         # There doesn't seem to be a method for this in the web3 lib.
@@ -728,7 +466,7 @@ class GolemBaseClient:
             receipt: TxReceipt,
         ) -> AsyncGenerator[GolemBaseTransactionReceipt, None]:
             for log in receipt["logs"]:
-                yield await self.__process_golem_base_log_receipt(log)
+                yield await self._process_golem_base_log_receipt(log)
 
         creates: List[CreateEntityReturnType] = []
         updates: List[UpdateEntityReturnType] = []
@@ -748,7 +486,7 @@ class GolemBaseClient:
             extensions=extensions,
         )
 
-    async def __send_gb_transaction(
+    async def _send_gb_transaction(
         self, tx: GolemBaseTransaction
     ) -> GolemBaseTransactionReceipt:
         txhash = await self.http_client().eth.send_transaction(
@@ -757,68 +495,11 @@ class GolemBaseClient:
                 # pylint: disable=no-member
                 "to": STORAGE_ADDRESS.as_address(),
                 "value": AsyncWeb3.to_wei(0, "ether"),
-                "data": self.__create_payload(tx),
+                "data": rlp_encode_transaction(tx),
             }
         )
         receipt = await self.http_client().eth.wait_for_transaction_receipt(txhash)
-        return await self.__process_golem_base_receipt(receipt)
-
-    def __create_payload(self, tx: GolemBaseTransaction) -> bytes:
-        def format_annotation[T](annotation: Annotation[T]) -> tuple[str, T]:
-            return (annotation.key, annotation.value)
-
-        # Turn the transaction into a simple list of basic types that can be
-        # RLP encoded
-        payload = [
-            # Create
-            list(
-                map(
-                    lambda el: [
-                        el.ttl,
-                        el.data,
-                        list(map(format_annotation, el.string_annotations)),
-                        list(map(format_annotation, el.numeric_annotations)),
-                    ],
-                    tx.creates,
-                )
-            ),
-            # Update
-            list(
-                map(
-                    lambda el: [
-                        el.entity_key.generic_bytes,
-                        el.ttl,
-                        el.data,
-                        list(map(format_annotation, el.string_annotations)),
-                        list(map(format_annotation, el.numeric_annotations)),
-                    ],
-                    tx.updates,
-                )
-            ),
-            # Delete
-            list(
-                map(
-                    lambda el: [
-                        el.entity_key.generic_bytes,
-                    ],
-                    tx.deletes,
-                )
-            ),
-            # Extend
-            list(
-                map(
-                    lambda el: [
-                        el.entity_key.generic_bytes,
-                        el.number_of_blocks,
-                    ],
-                    tx.extensions,
-                )
-            ),
-        ]
-        logger.debug("Payload before RLP encoding: %s", payload)
-        encoded = rlp.encode(payload)
-        logger.debug(encoded)
-        return encoded
+        return await self._process_golem_base_receipt(receipt)
 
     async def watch_logs(
         self,
@@ -828,7 +509,9 @@ class GolemBaseClient:
         extend_callback: Callable[[ExtendEntityReturnType], None],
     ) -> None:
         """
-        watch_logs
+        Subscribe to events on Golem Base.
+        You can pass in four different callbacks, and the right one will
+        be invoked for every create, update, delete, and extend operation.
         """
 
         async def log_handler(
@@ -838,7 +521,7 @@ class GolemBaseClient:
             # TypeDicts cannot be checked at runtime
             log_receipt = typing.cast(LogReceipt, handler_context.result)
             logger.debug("New log: %s", log_receipt)
-            res = await self.__process_golem_base_log_receipt(log_receipt)
+            res = await self._process_golem_base_log_receipt(log_receipt)
 
             for create in res.creates:
                 create_callback(create)
@@ -874,10 +557,10 @@ class GolemBaseClient:
         # Create a long running task to handle subscriptions that we can run on
         # the asyncio event loop
         task = asyncio.create_task(handle_subscriptions())
-        self.background_tasks.add(task)
+        self._background_tasks.add(task)
 
         def task_done(task: asyncio.Task) -> None:
             logger.info("Subscription background task done, removing...")
-            self.background_tasks.discard(task)
+            self._background_tasks.discard(task)
 
         task.add_done_callback(task_done)
