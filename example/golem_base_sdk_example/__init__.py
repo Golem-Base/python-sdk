@@ -99,6 +99,19 @@ async def connect():
 
         receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
         logger.info("receipt: %s", receipt)
+
+        query_result = await client.query_entities('foo = "bar"')
+        logger.info("query result: %s", query_result)
+
+        logger.info(
+            "My entities: %s",
+            await client.get_entities_of_owner(client.get_account_address()),
+        )
+
+        logger.info(
+            "All entities: %s",
+            await client.get_all_entity_keys(),
+        )
     else:
         logger.warning("Could not connect to the API...")
 

@@ -292,6 +292,16 @@ class EntityMetadata:
     numeric_annotations: Sequence[Annotation[int]]
 
 
+@dataclass(frozen=True)
+class QueryEntitiesResult:
+    """
+    QueryEntitiesResult
+    """
+
+    entity_key: EntityKey
+    storage_value: bytes
+
+
 class GolemBaseClient:
     """
     GolemBaseClient
@@ -447,6 +457,12 @@ class GolemBaseClient:
         await self.ws_client().subscription_manager.unsubscribe_all()
         await self.ws_client().provider.disconnect()
 
+    def get_account_address(self) -> ChecksumAddress:
+        """
+        get_account_address
+        """
+        return self.account.address
+
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """
         get_storage_value
@@ -520,7 +536,22 @@ class GolemBaseClient:
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
+                # https://github.com/pylint-dev/pylint/issues/3162
+                # pylint: disable=no-member
                 await self.http_client().eth.get_entities_of_owner(owner),
+            )
+        )
+
+    async def query_entities(self, query: str) -> Sequence[QueryEntitiesResult]:
+        """
+        query_entities
+        """
+        return list(
+            map(
+                lambda result: QueryEntitiesResult(
+                    entity_key=result.key, storage_value=base64.b64decode(result.value)
+                ),
+                await self.http_client().eth.query_entities(query),
             )
         )
 
