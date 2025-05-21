@@ -169,7 +169,7 @@ class Annotation[V]:
 
 
 @dataclass(frozen=True)
-class GolemBaseCreate(rlp.Serializable):
+class GolemBaseCreate:
     """
     GolemBaseCreate
     """
