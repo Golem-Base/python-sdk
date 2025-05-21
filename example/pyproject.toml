@@ -3,7 +3,7 @@ requires = ["flit_core >=3.11,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "golem-base-sdk"
+name = "golem-base-sdk-example"
 authors = [
     {name = "Ramses", email = "ramses@well-founded.dev"},
 ]
@@ -15,7 +15,8 @@ dynamic = ["version", "description"]
 dependencies = [
   "web3",
   "rlp",
+  "pyxdg",
 ]
 
 [project.scripts]
-main = "golem_base_sdk:main"
+main = "golem_base_sdk_example:main"

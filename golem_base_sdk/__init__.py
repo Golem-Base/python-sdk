@@ -33,7 +33,6 @@ from web3.utils.subscriptions import (
     LogsSubscription,
     LogsSubscriptionContext,
 )
-from xdg import BaseDirectory
 
 __version__ = "0.0.2"
 
@@ -152,30 +151,6 @@ GOLEM_BASE_ABI = [
 ]
 
 
-logging.config.dictConfig(
-    {
-        "version": 1,
-        "formatters": {
-            "default": {
-                "format": "[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
-            }
-        },
-        "handlers": {
-            "console": {
-                "class": "logging.StreamHandler",
-                "formatter": "default",
-                "level": "DEBUG",
-                "stream": "ext://sys.stdout",
-            }
-        },
-        "loggers": {
-            # "": {"level": "DEBUG", "handlers": ["console"]},
-            "": {"level": "INFO", "handlers": ["console"]},
-        },
-        # Avoid pre-existing loggers from imports being disabled
-        "disable_existing_loggers": False,
-    }
-)
 logger = logging.getLogger(__name__)
 
 
@@ -323,6 +298,7 @@ class GolemBaseClient:
     """
 
     client: AsyncWeb3
+    _ws_client: AsyncWeb3
     golem_base_contract: AsyncContract
     background_tasks: Set[asyncio.Task]
 
@@ -337,11 +313,10 @@ class GolemBaseClient:
         return GolemBaseClient(rpc_url, ws_client, private_key)
 
     def __init__(
-        self, rpc_url: str, ws_client: str, private_key: Sequence[bytes]
+        self, rpc_url: str, ws_client: AsyncWeb3, private_key: Sequence[bytes]
     ) -> None:
         self.client = GolemBaseClient.__create_client(rpc_url)
-
-        self.ws_client = ws_client
+        self._ws_client = ws_client
 
         # Keep references to async tasks we created
         self.background_tasks = set()
@@ -442,19 +417,45 @@ class GolemBaseClient:
         )
         return client
 
+    def http_client(self):
+        """
+        http_client
+        """
+        return self.client
+
+    def ws_client(self):
+        """
+        ws_client
+        """
+        return self._ws_client
+
+    async def is_connected(self) -> bool:
+        """
+        is_connected
+        """
+        return await self.http_client().is_connected()
+
+    async def disconnect(self) -> None:
+        """
+        disconnect
+        """
+        await self.http_client().provider.disconnect()
+        await self.ws_client().subscription_manager.unsubscribe_all()
+        await self.ws_client().provider.disconnect()
+
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """
         get_storage_value
         """
         return base64.b64decode(
-            await self.inner().eth.get_storage_value(entity_key.as_hex_string())
+            await self.http_client().eth.get_storage_value(entity_key.as_hex_string())
         )
 
     async def get_entity_metadata(self, entity_key: EntityKey):
         """
         get_entity_metadata
         """
-        metadata = await self.inner().eth.get_entity_metadata(
+        metadata = await self.http_client().eth.get_entity_metadata(
             entity_key.as_hex_string()
         )
 
@@ -485,7 +486,9 @@ class GolemBaseClient:
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.inner().eth.get_entities_to_expire_at_block(block_number),
+                await self.http_client().eth.get_entities_to_expire_at_block(
+                    block_number
+                ),
             )
         )
 
@@ -493,7 +496,7 @@ class GolemBaseClient:
         """
         get_entity_count
         """
-        return await self.inner().eth.get_entity_count()
+        return await self.http_client().eth.get_entity_count()
 
     # remaining 3 RPC methods
 
@@ -702,7 +705,7 @@ class GolemBaseClient:
                 "data": self.__create_payload(tx),
             }
         )
-        receipt = await self.inner().eth.wait_for_transaction_receipt(txhash)
+        receipt = await self.http_client().eth.wait_for_transaction_receipt(txhash)
         return await self.__process_golem_base_receipt(receipt)
 
     def __create_payload(self, tx: GolemBaseTransaction) -> bytes:
@@ -762,12 +765,6 @@ class GolemBaseClient:
         logger.debug(encoded)
         return encoded
 
-    def inner(self):
-        """
-        inner
-        """
-        return self.client
-
     async def watch_logs(
         self,
         create_callback: Callable[[CreateEntityReturnType], None],
@@ -808,7 +805,7 @@ class GolemBaseClient:
             )
 
         async def handle_subscriptions():
-            await self.ws_client.subscription_manager.subscribe(
+            await self._ws_client.subscription_manager.subscribe(
                 list(
                     map(
                         lambda event: create_subscription(event.topic),
@@ -817,7 +814,7 @@ class GolemBaseClient:
                 ),
             )
             # handle subscriptions via configured handlers:
-            await self.ws_client.subscription_manager.handle_subscriptions()
+            await self.ws_client().subscription_manager.handle_subscriptions()
 
         # Create a long running task to handle subscriptions that we can run on
         # the asyncio event loop
@@ -829,75 +826,3 @@ class GolemBaseClient:
             self.background_tasks.discard(task)
 
         task.add_done_callback(task_done)
-
-
-async def connect():
-    """
-    connect
-    """
-    with open(
-        BaseDirectory.xdg_config_home + "/golembase/private.key",
-        "rb",
-    ) as f:
-        key_bytes = f.readline()
-
-    client = await GolemBaseClient.create(
-        rpc_url=INSTANCE_URLS["kaolin"]["rpc"],
-        ws_url=INSTANCE_URLS["kaolin"]["ws"],
-        private_key=key_bytes,
-    )
-
-    await client.watch_logs(
-        lambda create: logger.info("Got create event: %s", create),
-        lambda update: logger.info("Got update event: %s", update),
-        lambda deleted_key: logger.info("Got delete event: %s", deleted_key),
-        lambda extension: logger.info("Got extension event: %s", extension),
-    )
-
-    if await client.inner().is_connected(show_traceback=True):
-        block = await client.inner().eth.get_block("latest")
-        logger.info("Retrieved block %s", block.number)
-
-        logger.info("entity count: %s", await client.get_entity_count())
-
-        receipt = await client.create_entities(
-            [GolemBaseCreate("hello", 60, [Annotation("foo", "bar")], [])]
-        )
-        entity_key = receipt[0].entity_key
-        logger.info("receipt: %s", receipt)
-        logger.info("entity count: %s", await client.get_entity_count())
-
-        logger.info(entity_key)
-        logger.info("storage value: %s", await client.get_storage_value(entity_key))
-        metadata = await client.get_entity_metadata(entity_key)
-        logger.info("entity metadata: %s", metadata)
-        logger.info(
-            "entities to expire at block: %s",
-            await client.get_entities_to_expire_at_block(metadata.expires_at_block),
-        )
-
-        receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
-        logger.info("receipt: %s", receipt)
-    else:
-        logger.warning("Could not connect to the API...")
-
-    await client.inner().provider.disconnect()
-    await client.ws_client.subscription_manager.unsubscribe_all()
-    await client.ws_client.provider.disconnect()
-
-
-async def run():
-    """
-    run
-    """
-    print("Connecting...")
-    await connect()
-
-
-def main():
-    """
-    main
-    """
-
-    logger.info("Starting main loop")
-    asyncio.run(run())
