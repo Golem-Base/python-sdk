@@ -115,4 +115,4 @@ async def main():
 
 if __name__ == "__main__":
     logger.info("Starting main loop")
-    asyncio.run(run())
+    asyncio.run(main())
