@@ -49,7 +49,7 @@ jobs:
           ./bin/golem-base-cli account list
           ./bin/golem-base-cli account fund --amount 2
 
-      - run: nix build .#golem-base-sdk-example
+      - run: nix build .#golem-base-sdk-example --no-write-lock-file
         working-directory: ./example
 
       - run: ./result/bin/main
