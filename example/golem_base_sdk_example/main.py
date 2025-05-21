@@ -105,17 +105,14 @@ async def connect():
     await client.disconnect()
 
 
-def main():
+async def main():
     """
     main
     """
+    print("Connecting...")
+    await connect()
 
-    async def run():
-        """
-        run
-        """
-        print("Connecting...")
-        await connect()
 
+if __name__ == "__main__":
     logger.info("Starting main loop")
     asyncio.run(run())

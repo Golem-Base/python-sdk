@@ -138,7 +138,7 @@ GOLEM_BASE_ABI = [
         "name": "GolemBaseStorageEntityBTLExptended",
         "type": "event",
     },
-    # Old ABI before renme of TTL -> BTL
+    # Old ABI before rename of TTL -> BTL
     {
         "anonymous": False,
         "inputs": [
