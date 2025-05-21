@@ -297,7 +297,7 @@ class GolemBaseClient:
     GolemBaseClient
     """
 
-    client: AsyncWeb3
+    _http_client: AsyncWeb3
     _ws_client: AsyncWeb3
     golem_base_contract: AsyncContract
     background_tasks: Set[asyncio.Task]
@@ -315,7 +315,7 @@ class GolemBaseClient:
     def __init__(
         self, rpc_url: str, ws_client: AsyncWeb3, private_key: Sequence[bytes]
     ) -> None:
-        self.client = GolemBaseClient.__create_client(rpc_url)
+        self._http_client = GolemBaseClient.__create_client(rpc_url)
         self._ws_client = ws_client
 
         # Keep references to async tasks we created
@@ -345,15 +345,19 @@ class GolemBaseClient:
         # The method on the provider is usually not called directly, instead you
         # can call the eponymous method on the client, which will delegate to the
         # provider.
-        setattr(self.client.provider, "is_connected", is_connected(self.client))
+        setattr(
+            self.http_client().provider,
+            "is_connected",
+            is_connected(self.http_client()),
+        )
 
         # Allow caching of certain methods to improve performance
-        self.client.provider.cache_allowed_requests = True
+        self.http_client().provider.cache_allowed_requests = True
 
         # Set up the ethereum account
-        self.account = self.client.eth.account.from_key(private_key)
+        self.account = self.http_client().eth.account.from_key(private_key)
         # Inject a middleware that will sign transactions with the account that we created
-        self.client.middleware_onion.inject(
+        self.http_client().middleware_onion.inject(
             # pylint doesn't detect nested @curry annotations properly...
             # pylint: disable=no-value-for-parameter
             SignAndSendRawMiddlewareBuilder.build(self.account),
@@ -361,12 +365,12 @@ class GolemBaseClient:
         )
         # Set the account as the default, so we don't need to specify the from field
         # every time
-        self.client.eth.default_account = self.account.address
+        self.http_client().eth.default_account = self.account.address
         logger.debug("Using account: %s", self.account.address)
 
         # https://github.com/pylint-dev/pylint/issues/3162
         # pylint: disable=no-member
-        self.golem_base_contract = self.client.eth.contract(
+        self.golem_base_contract = self.http_client().eth.contract(
             address=STORAGE_ADDRESS.as_address(),
             abi=GOLEM_BASE_ABI,
         )
@@ -421,9 +425,9 @@ class GolemBaseClient:
         """
         http_client
         """
-        return self.client
+        return self._http_client
 
-    def ws_client(self):
+    def ws_client(self) -> AsyncWeb3:
         """
         ws_client
         """
@@ -451,7 +455,7 @@ class GolemBaseClient:
             await self.http_client().eth.get_storage_value(entity_key.as_hex_string())
         )
 
-    async def get_entity_metadata(self, entity_key: EntityKey):
+    async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
         """
         get_entity_metadata
         """
@@ -497,6 +501,28 @@ class GolemBaseClient:
         get_entity_count
         """
         return await self.http_client().eth.get_entity_count()
+
+    async def get_all_entity_keys(self) -> Sequence[EntityKey]:
+        """
+        get_entity_keys
+        """
+        return list(
+            map(
+                lambda e: EntityKey(GenericBytes.from_hex_string(e)),
+                await self.http_client().eth.get_all_entity_keys(),
+            )
+        )
+
+    async def get_entities_of_owner(self, owner: Address) -> Sequence[EntityKey]:
+        """
+        get_entities_of_owner
+        """
+        return list(
+            map(
+                lambda e: EntityKey(GenericBytes.from_hex_string(e)),
+                await self.http_client().eth.get_entities_of_owner(owner),
+            )
+        )
 
     # remaining 3 RPC methods
 
@@ -544,7 +570,7 @@ class GolemBaseClient:
         extensions: Optional[Sequence[GolemBaseExtend]] = None,
     ) -> GolemBaseTransactionReceipt:
         """
-        create_entities
+        send_transaction
         """
         tx = GolemBaseTransaction(
             creates,
@@ -696,7 +722,7 @@ class GolemBaseClient:
     async def __send_gb_transaction(
         self, tx: GolemBaseTransaction
     ) -> GolemBaseTransactionReceipt:
-        txhash = await self.client.eth.send_transaction(
+        txhash = await self.http_client().eth.send_transaction(
             {
                 # https://github.com/pylint-dev/pylint/issues/3162
                 # pylint: disable=no-member
@@ -771,7 +797,7 @@ class GolemBaseClient:
         update_callback: Callable[[UpdateEntityReturnType], None],
         delete_callback: Callable[[EntityKey], None],
         extend_callback: Callable[[ExtendEntityReturnType], None],
-    ):
+    ) -> None:
         """
         watch_logs
         """
@@ -804,7 +830,7 @@ class GolemBaseClient:
                 handler_context={},
             )
 
-        async def handle_subscriptions():
+        async def handle_subscriptions() -> None:
             await self._ws_client.subscription_manager.subscribe(
                 list(
                     map(
