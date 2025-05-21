@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 .direnv
+example/flake.lock
