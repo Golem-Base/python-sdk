@@ -39,6 +39,7 @@ jobs:
           curl 'https://faucet.golembase.demo.golem-base.io/api/faucet' \
             -H 'Content-Type: application/json' \
             --data-raw "{\"address\":\"$ADDRESS\"}"
+          golembase-demo-cli account balance
 
       - run: nix build .#golem-base-sdk-example --no-write-lock-file
         working-directory: ./example
