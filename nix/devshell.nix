@@ -9,6 +9,7 @@ perSystem.devshell.mkShell {
       # Tools for building and uploading wheels
       ps.build
       ps.twine
+      ps.pdoc
     ]))
   ];
 }
