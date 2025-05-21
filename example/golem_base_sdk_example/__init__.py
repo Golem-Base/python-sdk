@@ -113,7 +113,7 @@ async def run():
     await connect()
 
 
-async def main():
+def main():
     """
     main
     """
