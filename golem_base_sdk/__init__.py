@@ -6,8 +6,10 @@ import asyncio
 import base64
 import logging
 import logging.config
+import typing
 from dataclasses import dataclass
 from typing import (
+    AsyncGenerator,
     Awaitable,
     Callable,
     Iterable,
@@ -20,20 +22,20 @@ from typing import (
 )
 
 import rlp
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexStr
 from web3 import AsyncWeb3, WebSocketProvider
 from web3.contract import AsyncContract
 from web3.exceptions import ProviderConnectionError
 from web3.method import Method, default_root_munger
 from web3.middleware import SignAndSendRawMiddlewareBuilder
-from web3.types import EventData, RPCEndpoint, TxReceipt
+from web3.types import LogReceipt, RPCEndpoint, TxReceipt
 from web3.utils.subscriptions import (
     LogsSubscription,
     LogsSubscriptionContext,
 )
 from xdg import BaseDirectory
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 
 @dataclass(frozen=True)
@@ -291,9 +293,9 @@ class ExtendEntityReturnType:
 
 
 @dataclass(frozen=True)
-class GolemBaseTransactionReturnType:
+class GolemBaseTransactionReceipt:
     """
-    GolemBaseTransactionReturnType
+    GolemBaseTransactionReceipt
     """
 
     creates: Sequence[CreateEntityReturnType]
@@ -537,7 +539,7 @@ class GolemBaseClient:
         updates: Optional[Sequence[GolemBaseUpdate]] = None,
         deletes: Optional[Sequence[GolemBaseDelete]] = None,
         extensions: Optional[Sequence[GolemBaseExtend]] = None,
-    ) -> GolemBaseTransactionReturnType:
+    ) -> GolemBaseTransactionReceipt:
         """
         create_entities
         """
@@ -549,28 +551,148 @@ class GolemBaseClient:
         )
         return await self.__send_gb_transaction(tx)
 
-    async def __send_gb_transaction(
-        self, tx: GolemBaseTransaction
-    ) -> GolemBaseTransactionReturnType:
+    async def __process_golem_base_log_receipt(
+        self,
+        log_receipt: LogReceipt,
+    ) -> GolemBaseTransactionReceipt:
+        # Read the first entry of the topics array,
+        # which is the hash of the event signature, identifying the event
+        topic = AsyncWeb3.to_hex(log_receipt["topics"][0])
+        # Look up the corresponding event
+        # If there is no such event in the ABI, it probably needs to be added
+        event = self.golem_base_contract.get_event_by_topic(topic)
+        # Use the event to process the whole log
+        event_data = event.process_log(log_receipt)
+
+        creates: List[CreateEntityReturnType] = []
+        updates: List[UpdateEntityReturnType] = []
+        deletes: List[EntityKey] = []
+        extensions: List[ExtendEntityReturnType] = []
+
+        match event_data["event"]:
+            case "GolemBaseStorageEntityCreated":
+                creates.append(
+                    CreateEntityReturnType(
+                        expiration_block=event_data["args"]["expirationBlock"],
+                        entity_key=EntityKey(
+                            GenericBytes(
+                                event_data["args"]["entityKey"].to_bytes(32, "big")
+                            )
+                        ),
+                    )
+                )
+            case "GolemBaseStorageEntityUpdated":
+                updates.append(
+                    UpdateEntityReturnType(
+                        expiration_block=event_data["args"]["expirationBlock"],
+                        entity_key=EntityKey(
+                            GenericBytes(
+                                event_data["args"]["entityKey"].to_bytes(32, "big")
+                            )
+                        ),
+                    )
+                )
+            case "GolemBaseStorageEntityDeleted":
+                deletes.append(
+                    EntityKey(
+                        GenericBytes(
+                            event_data["args"]["entityKey"].to_bytes(32, "big")
+                        ),
+                    )
+                )
+            case "GolemBaseStorageEntityBTLExtended":
+                extensions.append(
+                    ExtendEntityReturnType(
+                        old_expiration_block=event_data["args"]["old_expirationBlock"],
+                        new_expiration_block=event_data["args"]["new_expirationBlock"],
+                        entity_key=EntityKey(
+                            GenericBytes(
+                                event_data["args"]["entityKey"].to_bytes(32, "big")
+                            )
+                        ),
+                    )
+                )
+            # This is only here for backwards compatibility and can be removed
+            # once we undeploy kaolin.
+            case (
+                "GolemBaseStorageEntityBTLExptended"
+                | "GolemBaseStorageEntityTTLExptended"
+            ):
+                # For these types, the type signature in the ABI does
+                # not correspond to the actual data returned, so we need
+                # to parse the data ourselves.
+                def parse_log(log_receipt: LogReceipt) -> ExtendEntityReturnType:
+                    # pylint: disable=line-too-long
+                    # Take the first 64 bytes by masking the rest
+                    # (shift 1 to the left 256 positions, then negate the number)
+                    # Example:
+                    # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 012f
+                    #    0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0143
+                    # mask this with:
+                    # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+                    #    1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111
+                    # to obtain 0x143
+                    # and then shift the original number to the right
+                    # by 256 to obtain 0x12f
+                    data_parsed = int.from_bytes(
+                        log_receipt["data"], byteorder="big", signed=False
+                    )
+                    new_expiration_block = data_parsed & ((1 << 256) - 1)
+                    old_expiration_block = data_parsed >> 256
+
+                    return ExtendEntityReturnType(
+                        old_expiration_block=old_expiration_block,
+                        new_expiration_block=new_expiration_block,
+                        entity_key=EntityKey(GenericBytes(log_receipt["topics"][1])),
+                    )
+
+                extensions.append(parse_log(log_receipt))
+            case other:
+                raise ValueError(f"Unknown event type: {other}")
+
+        return GolemBaseTransactionReceipt(
+            creates=creates,
+            updates=updates,
+            deletes=deletes,
+            extensions=extensions,
+        )
+
+    async def __process_golem_base_receipt(
+        self, receipt: TxReceipt
+    ) -> GolemBaseTransactionReceipt:
         # There doesn't seem to be a method for this in the web3 lib.
         # The only option in the lib is to iterate over the events in the ABI
         # and call process_receipt on each of them to try and decode the logs.
         # This is inefficient though compared to reading the actual topic signature
         # and immediately selecting the right event from the ABI, which is what
         # we do here.
-        def process_receipt(
-            receipt: TxReceipt, contract: AsyncContract
-        ) -> Iterable[EventData]:
+        async def process_receipt(
+            receipt: TxReceipt,
+        ) -> AsyncGenerator[GolemBaseTransactionReceipt, None]:
             for log in receipt["logs"]:
-                # Read the first entry of the topics array,
-                # which is the hash of the event signature, identifying the event
-                topic = AsyncWeb3.to_hex(log["topics"][0])
-                # Look up the corresponding event
-                # If there is no such event in the ABI, it probably needs to be added
-                event = contract.get_event_by_topic(topic)
-                # Use the event to process the whole log
-                yield event.process_log(log)
+                yield await self.__process_golem_base_log_receipt(log)
 
+        creates: List[CreateEntityReturnType] = []
+        updates: List[UpdateEntityReturnType] = []
+        deletes: List[EntityKey] = []
+        extensions: List[ExtendEntityReturnType] = []
+
+        async for res in process_receipt(receipt):
+            creates.extend(res.creates)
+            updates.extend(res.updates)
+            deletes.extend(res.deletes)
+            extensions.extend(res.extensions)
+
+        return GolemBaseTransactionReceipt(
+            creates=creates,
+            updates=updates,
+            deletes=deletes,
+            extensions=extensions,
+        )
+
+    async def __send_gb_transaction(
+        self, tx: GolemBaseTransaction
+    ) -> GolemBaseTransactionReceipt:
         txhash = await self.client.eth.send_transaction(
             {
                 # https://github.com/pylint-dev/pylint/issues/3162
@@ -581,98 +703,7 @@ class GolemBaseClient:
             }
         )
         receipt = await self.inner().eth.wait_for_transaction_receipt(txhash)
-
-        creates: List[CreateEntityReturnType] = []
-        updates: List[UpdateEntityReturnType] = []
-        deletes: List[EntityKey] = []
-        extensions: List[ExtendEntityReturnType] = []
-
-        for log in process_receipt(receipt, self.golem_base_contract):
-            match log["event"]:
-                case "GolemBaseStorageEntityCreated":
-                    creates.append(
-                        CreateEntityReturnType(
-                            expiration_block=log["args"]["expirationBlock"],
-                            entity_key=EntityKey(
-                                GenericBytes(
-                                    log["args"]["entityKey"].to_bytes(32, "big")
-                                )
-                            ),
-                        )
-                    )
-                case "GolemBaseStorageEntityUpdated":
-                    updates.append(
-                        UpdateEntityReturnType(
-                            expiration_block=log["args"]["expirationBlock"],
-                            entity_key=EntityKey(
-                                GenericBytes(
-                                    log["args"]["entityKey"].to_bytes(32, "big")
-                                )
-                            ),
-                        )
-                    )
-                case "GolemBaseStorageEntityDeleted":
-                    deletes.append(
-                        EntityKey(
-                            GenericBytes(log["args"]["entityKey"].to_bytes(32, "big")),
-                        )
-                    )
-                case "GolemBaseStorageEntityBTLExtended":
-                    extensions.append(
-                        ExtendEntityReturnType(
-                            old_expiration_block=log["args"]["old_expirationBlock"],
-                            new_expiration_block=log["args"]["new_expirationBlock"],
-                            entity_key=EntityKey(
-                                GenericBytes(
-                                    log["args"]["entityKey"].to_bytes(32, "big")
-                                )
-                            ),
-                        )
-                    )
-                # This is only here for backwards compatibility and can be removed
-                # once we undeploy kaolin.
-                case (
-                    "GolemBaseStorageEntityBTLExptended"
-                    | "GolemBaseStorageEntityTTLExptended"
-                ):
-                    # For these types, the type signature in the ABI does
-                    # not correspond to the actual data returned, so we need
-                    # to parse the data ourselves.
-                    def parse_log(txlog) -> ExtendEntityReturnType:
-                        # pylint: disable=line-too-long
-                        # Take the first 64 bytes by masking the rest
-                        # (shift 1 to the left 256 positions, then negate the number)
-                        # Example:
-                        # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 012f
-                        #    0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0143
-                        # mask this with:
-                        # 0x 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
-                        #    1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111
-                        # to obtain 0x143
-                        # and then shift the original number to the right
-                        # by 256 to obtain 0x12f
-                        data_parsed = int.from_bytes(
-                            txlog.data, byteorder="big", signed=False
-                        )
-                        new_expiration_block = data_parsed & ((1 << 256) - 1)
-                        old_expiration_block = data_parsed >> 256
-
-                        return ExtendEntityReturnType(
-                            old_expiration_block=old_expiration_block,
-                            new_expiration_block=new_expiration_block,
-                            entity_key=EntityKey(GenericBytes(txlog.topics[1])),
-                        )
-
-                    extensions.append(parse_log(receipt["logs"][log["logIndex"]]))
-                case other:
-                    raise ValueError(f"Unknown event type: {other}")
-
-        return GolemBaseTransactionReturnType(
-            creates=creates,
-            updates=updates,
-            deletes=deletes,
-            extensions=extensions,
-        )
+        return await self.__process_golem_base_receipt(receipt)
 
     def __create_payload(self, tx: GolemBaseTransaction) -> bytes:
         def format_annotation[T](annotation: Annotation[T]) -> tuple[str, T]:
@@ -737,60 +768,60 @@ class GolemBaseClient:
         """
         return self.client
 
-    async def watch_logs(self):
+    async def watch_logs(
+        self,
+        create_callback: Callable[[CreateEntityReturnType], None],
+        update_callback: Callable[[UpdateEntityReturnType], None],
+        delete_callback: Callable[[EntityKey], None],
+        extend_callback: Callable[[ExtendEntityReturnType], None],
+    ):
         """
         watch_logs
         """
 
-        async def go():
-            async def new_logs_handler(
-                handler_context: LogsSubscriptionContext,
-            ) -> None:
-                log_receipt = handler_context.result
-                logger.info("New log: %s", log_receipt)
+        async def log_handler(
+            handler_context: LogsSubscriptionContext,
+        ) -> None:
+            # We only use this handler for log receipts
+            # TypeDicts cannot be checked at runtime
+            log_receipt = typing.cast(LogReceipt, handler_context.result)
+            logger.debug("New log: %s", log_receipt)
+            res = await self.__process_golem_base_log_receipt(log_receipt)
 
-                event_data = handler_context.event.process_log(log_receipt)
-                logger.info("Log event data: %s", event_data)
+            for create in res.creates:
+                create_callback(create)
+            for update in res.updates:
+                update_callback(update)
+            for key in res.deletes:
+                delete_callback(key)
+            for extension in res.extensions:
+                extend_callback(extension)
 
-                # if log_receipt["blockNumber"] > 42012345:
-                #    await handler_context.subscription.unsubscribe()
-
-            watch_creates = LogsSubscription(
-                label="Golem Base create events",
+        def create_subscription(topic: HexStr) -> LogsSubscription:
+            return LogsSubscription(
+                label=f"Golem Base subscription to topic {topic}",
                 address=self.golem_base_contract.address,
-                topics=[
-                    self.golem_base_contract.events.GolemBaseStorageEntityCreated().topic
-                ],
-                handler=new_logs_handler,
+                topics=[topic],
+                handler=log_handler,
                 # optional `handler_context` args to help parse a response
-                handler_context={
-                    "event": self.golem_base_contract.events.GolemBaseStorageEntityCreated()
-                },
+                handler_context={},
             )
 
-            watch_extensions = LogsSubscription(
-                label="Golem Base extend events",
-                address=self.golem_base_contract.address,
-                topics=[
-                    self.golem_base_contract.events.GolemBaseStorageEntityBTLExptended().topic
-                ],
-                handler=new_logs_handler,
-                # optional `handler_context` args to help parse a response
-                handler_context={
-                    "event": self.golem_base_contract.events.GolemBaseStorageEntityBTLExptended()
-                },
-            )
-
+        async def handle_subscriptions():
             await self.ws_client.subscription_manager.subscribe(
-                [
-                    watch_creates,
-                    watch_extensions,
-                ]
+                list(
+                    map(
+                        lambda event: create_subscription(event.topic),
+                        self.golem_base_contract.all_events(),
+                    )
+                ),
             )
             # handle subscriptions via configured handlers:
             await self.ws_client.subscription_manager.handle_subscriptions()
 
-        task = asyncio.create_task(go())
+        # Create a long running task to handle subscriptions that we can run on
+        # the asyncio event loop
+        task = asyncio.create_task(handle_subscriptions())
         self.background_tasks.add(task)
 
         def task_done(task: asyncio.Task) -> None:
@@ -816,7 +847,12 @@ async def connect():
         private_key=key_bytes,
     )
 
-    await client.watch_logs()
+    await client.watch_logs(
+        lambda create: logger.info("Got create event: %s", create),
+        lambda update: logger.info("Got update event: %s", update),
+        lambda deleted_key: logger.info("Got delete event: %s", deleted_key),
+        lambda extension: logger.info("Got extension event: %s", extension),
+    )
 
     if await client.inner().is_connected(show_traceback=True):
         block = await client.inner().eth.get_block("latest")

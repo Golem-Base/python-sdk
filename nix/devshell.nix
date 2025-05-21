@@ -6,7 +6,10 @@ perSystem.devshell.mkShell {
       ps.web3
       ps.rlp
       ps.pyxdg
-      ps.coloredlogs
+
+      # Tools for building and uploading wheels
+      ps.build
+      ps.twine
     ]))
   ];
 }
