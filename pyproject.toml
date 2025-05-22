@@ -16,3 +16,9 @@ dependencies = [
   "web3",
   "rlp",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Golem-Base/"
+Documentation = "https://golem-base.github.io/python-sdk/golem_base_sdk.html"
+Repository = "https://github.com/Golem-Base/python-sdk"
+Issues = "https://github.com/Golem-Base/python-sdk/issues"
