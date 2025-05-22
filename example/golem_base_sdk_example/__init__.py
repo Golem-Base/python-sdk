@@ -2,6 +2,7 @@
 
 """GolemBase Python SDK"""
 
+import argparse
 import asyncio
 import logging
 import logging.config
@@ -44,6 +45,7 @@ INSTANCE_URLS = {
     },
     "local": {
         "rpc": "http://localhost:8545",
+        "ws": "ws://localhost:8545",
     },
     "kaolin": {
         "rpc": "https://rpc.kaolin.holesky.golem-base.io",
@@ -52,7 +54,7 @@ INSTANCE_URLS = {
 }
 
 
-async def connect():
+async def run_example(instance: str) -> None:
     """
     connect
     """
@@ -63,8 +65,8 @@ async def connect():
         key_bytes = f.readline()
 
     client = await GolemBaseClient.create(
-        rpc_url=INSTANCE_URLS["kaolin"]["rpc"],
-        ws_url=INSTANCE_URLS["kaolin"]["ws"],
+        rpc_url=INSTANCE_URLS[instance]["rpc"],
+        ws_url=INSTANCE_URLS[instance]["ws"],
         private_key=key_bytes,
     )
 
@@ -118,20 +120,20 @@ async def connect():
     await client.disconnect()
 
 
-async def run():
-    """
-    run
-    """
-    print("Connecting...")
-    await connect()
-
-
-def main():
+def main() -> None:
     """
     main
     """
+    parser = argparse.ArgumentParser(description="GolemBase Python SDK Example")
+    parser.add_argument(
+        "--instance",
+        choices=INSTANCE_URLS.keys(),
+        default="kaolin",
+        help="Which instance to connect to (default: kaolin)",
+    )
+    args = parser.parse_args()
     logger.info("Starting main loop")
-    asyncio.run(run())
+    asyncio.run(run_example(args.instance))
 
 
 if __name__ == "__main__":
