@@ -2,16 +2,18 @@
 Constants used in the Golem Base SDK
 """
 
+from typing import Any, Final, Sequence
+
 from .types import (
     Address,
     GenericBytes,
 )
 
-STORAGE_ADDRESS: Address = Address(
+STORAGE_ADDRESS: Final[Address] = Address(
     GenericBytes.from_hex_string("0x0000000000000000000000000000000060138453")
 )
 
-GOLEM_BASE_ABI = [
+GOLEM_BASE_ABI: Final[Sequence[dict[str, Any]]] = [
     {
         "anonymous": False,
         "inputs": [
