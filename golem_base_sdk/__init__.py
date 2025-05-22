@@ -9,7 +9,6 @@ from typing import (
     AsyncGenerator,
     Awaitable,
     Callable,
-    Iterable,
     List,
     Optional,
     Sequence,
@@ -263,7 +262,7 @@ class GolemBaseClient:
 
     async def get_entities_to_expire_at_block(
         self, block_number: int
-    ) -> Iterable[EntityKey]:
+    ) -> Sequence[EntityKey]:
         """
         Get all entities that will expire at the given block
         """
@@ -322,7 +321,7 @@ class GolemBaseClient:
     async def create_entities(
         self,
         creates: Sequence[GolemBaseCreate],
-    ) -> Iterable[CreateEntityReturnType]:
+    ) -> Sequence[CreateEntityReturnType]:
         """
         Create entities in Golem Base
         """
@@ -331,7 +330,7 @@ class GolemBaseClient:
     async def update_entities(
         self,
         updates: Sequence[GolemBaseUpdate],
-    ) -> Iterable[UpdateEntityReturnType]:
+    ) -> Sequence[UpdateEntityReturnType]:
         """
         Update entities in Golem Base
         """
@@ -340,7 +339,7 @@ class GolemBaseClient:
     async def delete_entities(
         self,
         deletes: Sequence[GolemBaseDelete],
-    ) -> Iterable[EntityKey]:
+    ) -> Sequence[EntityKey]:
         """
         Delete entities from Golem Base
         """
@@ -349,7 +348,7 @@ class GolemBaseClient:
     async def extend_entities(
         self,
         extensions: Sequence[GolemBaseExtend],
-    ) -> Iterable[ExtendEntityReturnType]:
+    ) -> Sequence[ExtendEntityReturnType]:
         """
         Extend the BTL of entities in Golem Base
         """
