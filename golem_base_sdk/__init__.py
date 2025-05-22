@@ -290,7 +290,9 @@ class GolemBaseClient:
             )
         )
 
-    async def get_entities_of_owner(self, owner: Address) -> Sequence[EntityKey]:
+    async def get_entities_of_owner(
+        self, owner: ChecksumAddress
+    ) -> Sequence[EntityKey]:
         """
         Get all the entities owned by the given address
         """
