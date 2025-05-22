@@ -60,9 +60,7 @@ def rlp_encode_transaction(tx: GolemBaseTransaction) -> bytes:
         # Delete
         list(
             map(
-                lambda el: [
-                    el.entity_key.generic_bytes,
-                ],
+                lambda el: el.entity_key.generic_bytes,
                 tx.deletes,
             )
         ),
