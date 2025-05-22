@@ -1,6 +1,6 @@
 {
   inputs = {
-    golem-base-sdk.url = "path:..";
+    golem-base-sdk.url = "git+file:..";
 
     devshell = {
       url = "github:numtide/devshell";
