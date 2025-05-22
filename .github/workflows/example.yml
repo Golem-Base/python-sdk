@@ -41,7 +41,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.2"
+          go-version-file: "gb-op-geth/go.mod"
+          cache-dependency-path: |
+            gb-op-geth/go.sum
 
       - name: Create and fund an account
         run: |
