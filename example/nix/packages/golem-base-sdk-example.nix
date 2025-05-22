@@ -64,7 +64,7 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    mypy ${src}/golem_base_sdk_example
+    mypy --check-untyped-defs ${src}/golem_base_sdk_example
     ruff check --no-cache ${src}/golem_base_sdk_example
     PYLINTHOME="$TMPDIR" pylint ${src}/golem_base_sdk_example
   '';
