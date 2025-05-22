@@ -427,8 +427,8 @@ class GolemBaseClient:
             case "GolemBaseStorageEntityBTLExtended":
                 extensions.append(
                     ExtendEntityReturnType(
-                        old_expiration_block=event_data["args"]["old_expirationBlock"],
-                        new_expiration_block=event_data["args"]["new_expirationBlock"],
+                        old_expiration_block=event_data["args"]["oldExpirationBlock"],
+                        new_expiration_block=event_data["args"]["newExpirationBlock"],
                         entity_key=EntityKey(
                             GenericBytes(
                                 event_data["args"]["entityKey"].to_bytes(32, "big")
