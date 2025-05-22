@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "golem-base-sdk"
 authors = [
-    {name = "Ramses", email = "ramses@well-founded.dev"},
+    {name = "rvdp", email = "online@well-founded.dev"},
 ]
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -16,6 +16,3 @@ dependencies = [
   "web3",
   "rlp",
 ]
-
-[project.scripts]
-main = "golem_base_sdk:main"
