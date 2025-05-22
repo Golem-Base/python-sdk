@@ -83,11 +83,11 @@ async def run_example(instance: str) -> None:
 
         logger.info("entity count: %s", await client.get_entity_count())
 
-        receipt = await client.create_entities(
-            [GolemBaseCreate("hello", 60, [Annotation("foo", "bar")], [])]
+        create_receipt = await client.create_entities(
+            [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
         )
-        entity_key = receipt[0].entity_key
-        logger.info("receipt: %s", receipt)
+        entity_key = create_receipt[0].entity_key
+        logger.info("receipt: %s", create_receipt)
         logger.info("entity count: %s", await client.get_entity_count())
 
         logger.info(entity_key)
@@ -99,8 +99,9 @@ async def run_example(instance: str) -> None:
             await client.get_entities_to_expire_at_block(metadata.expires_at_block),
         )
 
-        receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
-        logger.info("receipt: %s", receipt)
+        extend_receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
+        logger.info("receipt: %s", extend_receipt)
+
 
         query_result = await client.query_entities('foo = "bar"')
         logger.info("query result: %s", query_result)
