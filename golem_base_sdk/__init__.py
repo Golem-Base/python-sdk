@@ -77,7 +77,7 @@ class GolemBaseClient:
 
     @staticmethod
     async def create(
-        rpc_url: str, ws_url: str, private_key: Sequence[bytes]
+        rpc_url: str, ws_url: str, private_key: bytes
     ) -> "GolemBaseClient":
         """
         Static method to create a `GolemBaseClient` instance,
@@ -86,9 +86,7 @@ class GolemBaseClient:
         ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
         return GolemBaseClient(rpc_url, ws_client, private_key)
 
-    def __init__(
-        self, rpc_url: str, ws_client: AsyncWeb3, private_key: Sequence[bytes]
-    ) -> None:
+    def __init__(self, rpc_url: str, ws_client: AsyncWeb3, private_key: bytes) -> None:
         self._http_client = GolemBaseClient._create_client(rpc_url)
         self._ws_client = ws_client
 
