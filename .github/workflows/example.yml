@@ -16,6 +16,8 @@ jobs:
         image: "quay.io/golemnetwork/gb-op-geth:latest"
         ports:
           - 8545:8545
+        options: |
+          --entrypoint "go run ../cmd/geth --dev --http --http.api 'eth,web3,net,debug,golembase' --verbosity 3 --http.addr '0.0.0.0' --http.port 8545 --http.corsdomain '*' --http.vhosts '*' --ws --ws.addr '0.0.0.0' --ws.port 8545"
 
     steps:
       - uses: actions/checkout@v4
