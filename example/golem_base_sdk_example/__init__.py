@@ -9,7 +9,14 @@ import logging.config
 
 from xdg import BaseDirectory
 
-from golem_base_sdk import Annotation, GolemBaseClient, GolemBaseCreate, GolemBaseExtend
+from golem_base_sdk import (
+    Annotation,
+    GolemBaseClient,
+    GolemBaseCreate,
+    GolemBaseDelete,
+    GolemBaseExtend,
+    GolemBaseUpdate,
+)
 
 __version__ = "0.0.1"
 
@@ -58,11 +65,12 @@ async def run_example(instance: str) -> None:
     """
     connect
     """
+
     with open(
         BaseDirectory.xdg_config_home + "/golembase/private.key",
         "rb",
-    ) as f:
-        key_bytes = f.readline()
+    ) as private_key_file:
+        key_bytes = private_key_file.readline()
 
     client = await GolemBaseClient.create(
         rpc_url=INSTANCE_URLS[instance]["rpc"],
@@ -71,17 +79,50 @@ async def run_example(instance: str) -> None:
     )
 
     await client.watch_logs(
-        lambda create: logger.info("Got create event: %s", create),
-        lambda update: logger.info("Got update event: %s", update),
-        lambda deleted_key: logger.info("Got delete event: %s", deleted_key),
-        lambda extension: logger.info("Got extension event: %s", extension),
+        lambda create: logger.info(
+            """\n
+Got create event: %s
+        """,
+            create,
+        ),
+        lambda update: logger.info(
+            """\n
+Got update event: %s
+        """,
+            update,
+        ),
+        lambda deleted_key: logger.info(
+            """\n
+Got delete event: %s
+        """,
+            deleted_key,
+        ),
+        lambda extension: logger.info(
+            """\n
+Got extend event: %s
+        """,
+            extension,
+        ),
     )
 
     if await client.is_connected():
         block = await client.http_client().eth.get_block("latest")
+
+        logger.info("""\n
+        *****************************
+        * Checking basic methods... *
+        *****************************
+        """)
+
         logger.info("Retrieved block %s", block.number)
 
         logger.info("entity count: %s", await client.get_entity_count())
+
+        logger.info("""\n
+        *************************
+        * Creating an entity... *
+        *************************
+        """)
 
         create_receipt = await client.create_entities(
             [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
@@ -90,10 +131,17 @@ async def run_example(instance: str) -> None:
         logger.info("receipt: %s", create_receipt)
         logger.info("entity count: %s", await client.get_entity_count())
 
-        logger.info(entity_key)
+        logger.info("created entity with key %s", entity_key)
         logger.info("storage value: %s", await client.get_storage_value(entity_key))
         metadata = await client.get_entity_metadata(entity_key)
         logger.info("entity metadata: %s", metadata)
+
+        logger.info("""\n
+        ***********************************
+        * Extend the BTL of the entity... *
+        ***********************************
+        """)
+
         logger.info(
             "entities to expire at block: %s",
             await client.get_entities_to_expire_at_block(metadata.expires_at_block),
@@ -102,9 +150,44 @@ async def run_example(instance: str) -> None:
         extend_receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
         logger.info("receipt: %s", extend_receipt)
 
+        logger.info(
+            "entities to expire at block: %s",
+            await client.get_entities_to_expire_at_block(metadata.expires_at_block),
+        )
+        logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
 
-        query_result = await client.query_entities('foo = "bar"')
-        logger.info("query result: %s", query_result)
+        logger.info("""\n
+        ************************
+        * Update the entity... *
+        ************************
+        """)
+
+        update_receipt = await client.update_entities(
+            [GolemBaseUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
+        )
+        logger.info("receipt: %s", update_receipt)
+        entity_key = update_receipt[0].entity_key
+
+        logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
+
+        logger.info("""\n
+        *************************
+        * Query for entities... *
+        *************************
+        """)
+
+        query_result = await client.query_entities('app = "demo"')
+        logger.info("Query result: %s", query_result)
+
+        logger.info("""\n
+        ************************
+        * Delete the entity... *
+        ************************
+        """)
+
+        logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
+        receipt = await client.delete_entities([GolemBaseDelete(entity_key)])
+        logger.info("receipt: %s", receipt)
 
         logger.info(
             "My entities: %s",
