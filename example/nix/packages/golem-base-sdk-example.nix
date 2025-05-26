@@ -53,6 +53,7 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   propagatedBuildInputs = [
+    pkgs.python3Packages.anyio
     pkgs.python3Packages.pyxdg
     perSystem.golem-base-sdk.golem-base-sdk
   ];
@@ -64,7 +65,7 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    mypy --check-untyped-defs ${src}/golem_base_sdk_example
+    mypy --config ${../../../mypy.ini} ${src}/golem_base_sdk_example
     ruff check --no-cache ${src}/golem_base_sdk_example
     PYLINTHOME="$TMPDIR" pylint ${src}/golem_base_sdk_example
   '';

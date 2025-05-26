@@ -1,14 +1,11 @@
-#! /usr/bin/env python
-
-"""GolemBase Python SDK"""
+"""GolemBase Python SDK."""
 
 import argparse
 import asyncio
 import logging
 import logging.config
 
-from xdg import BaseDirectory
-
+import anyio
 from golem_base_sdk import (
     Annotation,
     GolemBaseClient,
@@ -17,6 +14,7 @@ from golem_base_sdk import (
     GolemBaseExtend,
     GolemBaseUpdate,
 )
+from xdg import BaseDirectory
 
 __version__ = "0.0.1"
 
@@ -62,15 +60,12 @@ INSTANCE_URLS = {
 
 
 async def run_example(instance: str) -> None:
-    """
-    connect
-    """
-
-    with open(
+    """Run the example."""
+    async with await anyio.open_file(
         BaseDirectory.xdg_config_home + "/golembase/private.key",
         "rb",
     ) as private_key_file:
-        key_bytes = private_key_file.readline()
+        key_bytes = await private_key_file.read(32)
 
     client = await GolemBaseClient.create(
         rpc_url=INSTANCE_URLS[instance]["rpc"],
@@ -106,15 +101,14 @@ Got extend event: %s
     )
 
     if await client.is_connected():
-        block = await client.http_client().eth.get_block("latest")
-
         logger.info("""\n
         *****************************
         * Checking basic methods... *
         *****************************
         """)
 
-        logger.info("Retrieved block %s", block.number)
+        block = await client.http_client().eth.get_block("latest")
+        logger.info("Retrieved block %s", block["number"])
 
         logger.info("entity count: %s", await client.get_entity_count())
 
@@ -143,16 +137,27 @@ Got extend event: %s
         """)
 
         logger.info(
-            "entities to expire at block: %s",
+            "entities to expire at block %s: %s",
+            metadata.expires_at_block,
             await client.get_entities_to_expire_at_block(metadata.expires_at_block),
         )
 
-        extend_receipt = await client.extend_entities([GolemBaseExtend(entity_key, 60)])
+        [extend_receipt] = await client.extend_entities(
+            [GolemBaseExtend(entity_key, 60)]
+        )
         logger.info("receipt: %s", extend_receipt)
 
         logger.info(
-            "entities to expire at block: %s",
+            "entities to expire at block %s: %s",
+            metadata.expires_at_block,
             await client.get_entities_to_expire_at_block(metadata.expires_at_block),
+        )
+        logger.info(
+            "entities to expire at block %s: %s",
+            extend_receipt.new_expiration_block,
+            await client.get_entities_to_expire_at_block(
+                extend_receipt.new_expiration_block
+            ),
         )
         logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
 
@@ -162,6 +167,9 @@ Got extend event: %s
         ************************
         """)
 
+        logger.info(
+            "block number: %s", await client.http_client().eth.get_block_number()
+        )
         update_receipt = await client.update_entities(
             [GolemBaseUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
         )
@@ -186,6 +194,10 @@ Got extend event: %s
         """)
 
         logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
+        logger.info(
+            "block number: %s", await client.http_client().eth.get_block_number()
+        )
+
         receipt = await client.delete_entities([GolemBaseDelete(entity_key)])
         logger.info("receipt: %s", receipt)
 
@@ -205,9 +217,7 @@ Got extend event: %s
 
 
 def main() -> None:
-    """
-    main
-    """
+    """Run the example."""
     parser = argparse.ArgumentParser(description="GolemBase Python SDK Example")
     parser.add_argument(
         "--instance",

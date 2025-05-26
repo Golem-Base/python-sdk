@@ -52,7 +52,7 @@ pkgs.python3Packages.buildPythonPackage rec {
       [mypy-rlp.*]
       follow_untyped_imports = True
     EOF
-    mypy --check-untyped-defs --config-file ./mypy.conf ${src}/golem_base_sdk
+    mypy --config-file ${../../mypy.ini} ${src}/golem_base_sdk
     ruff check --no-cache ${src}/golem_base_sdk
     PYLINTHOME="$TMPDIR" pylint ${src}/golem_base_sdk
   '';
