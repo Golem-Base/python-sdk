@@ -1,8 +1,7 @@
-"""
-Constants used in the Golem Base SDK
-"""
+"""Constants used in the Golem Base SDK."""
 
-from typing import Any, Final, Sequence
+from collections.abc import Sequence
+from typing import Any, Final
 
 from .types import (
     Address,
@@ -49,7 +48,8 @@ GOLEM_BASE_ABI: Final[Sequence[dict[str, Any]]] = [
         "type": "event",
     },
     # Old ABI event that has a typo in the name and a missing non-indexed argument.
-    # This can be removed once we retire the kaolin network (the only one using this event hash).
+    # This can be removed once we retire the kaolin network (the only one using
+    # this event hash).
     {
         "anonymous": False,
         "inputs": [

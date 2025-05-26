@@ -1,18 +1,19 @@
-"""GolemBase Python SDK"""
+"""GolemBase Python SDK."""
 
 import asyncio
 import base64
 import logging
 import logging.config
 import typing
-from typing import (
+from collections.abc import (
     AsyncGenerator,
-    Awaitable,
-    Callable,
-    List,
-    Optional,
+    Coroutine,
     Sequence,
-    Set,
+)
+from typing import (
+    Any,
+    Callable,
+    Optional,
 )
 
 from eth_typing import ChecksumAddress, HexStr
@@ -50,113 +51,46 @@ from .types import (
 )
 from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
 
-
 __version__ = "0.0.3"
+
+__all__: Sequence[str] = [
+    # Exports from .types
+    "Address",
+    "Annotation",
+    "CreateEntityReturnType",
+    "EntityKey",
+    "EntityMetadata",
+    "ExtendEntityReturnType",
+    "GenericBytes",
+    "GolemBaseCreate",
+    "GolemBaseDelete",
+    "GolemBaseExtend",
+    "GolemBaseTransaction",
+    "GolemBaseTransactionReceipt",
+    "GolemBaseUpdate",
+    "QueryEntitiesResult",
+    "UpdateEntityReturnType",
+    # Exports from .constants
+    "GOLEM_BASE_ABI",
+    "STORAGE_ADDRESS",
+    # Exports from this file
+    "GolemBaseClient",
+]
 
 
 logger = logging.getLogger(__name__)
-"""
-@private
-"""
+"""@private"""
 
 
-class GolemBaseClient:
-    """
-    The Golem Base client used to interact with Golem Base.
-    Many useful methods are implemented directly on this type, while more
-    generic ethereum methods can be accessed through the underlying
-    web3 client that you can access with the
-    `GolemBaseClient.http_client()`
-    method.
-    """
+class GolemBaseHttpClient(AsyncWeb3):
+    """Subclass of AsyncWeb3 with added Golem Base methods."""
 
-    _http_client: AsyncWeb3
-    _ws_client: AsyncWeb3
-    _golem_base_contract: AsyncContract
-    _background_tasks: Set[asyncio.Task]
-
-    @staticmethod
-    async def create(
-        rpc_url: str, ws_url: str, private_key: bytes
-    ) -> "GolemBaseClient":
-        """
-        Static method to create a `GolemBaseClient` instance,
-        this is the preferred method to create an instance.
-        """
-        ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
-        return GolemBaseClient(rpc_url, ws_client, private_key)
-
-    def __init__(self, rpc_url: str, ws_client: AsyncWeb3, private_key: bytes) -> None:
-        self._http_client = GolemBaseClient._create_client(rpc_url)
-        self._ws_client = ws_client
-
-        # Keep references to async tasks we created
-        self._background_tasks = set()
-
-        def is_connected(client) -> Callable[[bool], Awaitable[bool]]:
-            async def inner(show_traceback: bool) -> bool:
-                try:
-                    logger.debug("Calling eth_blockNumber to test connectivity...")
-                    await client.eth.get_block_number()
-                    return True
-                except (OSError, ProviderConnectionError) as e:
-                    logger.debug(
-                        "Problem connecting to provider", exc_info=show_traceback
-                    )
-                    if show_traceback:
-                        raise ProviderConnectionError(
-                            "Problem connecting to provider"
-                        ) from e
-                    return False
-
-            return inner
-
-        # The default is_connected method calls web3_clientVersion, but the web3
-        # API is not enabled on all our nodes, so let's monkey patch this to call
-        # eth_getBlockNumber instead.
-        # The method on the provider is usually not called directly, instead you
-        # can call the eponymous method on the client, which will delegate to the
-        # provider.
-        setattr(
-            self.http_client().provider,
-            "is_connected",
-            is_connected(self.http_client()),
+    def __init__(self, rpc_url: str):
+        super().__init__(
+            AsyncWeb3.AsyncHTTPProvider(rpc_url, request_kwargs={"timeout": 60})
         )
 
-        # Allow caching of certain methods to improve performance
-        self.http_client().provider.cache_allowed_requests = True
-
-        # Set up the ethereum account
-        self.account = self.http_client().eth.account.from_key(private_key)
-        # Inject a middleware that will sign transactions with the account that we created
-        self.http_client().middleware_onion.inject(
-            # pylint doesn't detect nested @curry annotations properly...
-            # pylint: disable=no-value-for-parameter
-            SignAndSendRawMiddlewareBuilder.build(self.account),
-            layer=0,
-        )
-        # Set the account as the default, so we don't need to specify the from field
-        # every time
-        self.http_client().eth.default_account = self.account.address
-        logger.debug("Using account: %s", self.account.address)
-
-        # https://github.com/pylint-dev/pylint/issues/3162
-        # pylint: disable=no-member
-        self.golem_base_contract = self.http_client().eth.contract(
-            address=STORAGE_ADDRESS.as_address(),
-            abi=GOLEM_BASE_ABI,
-        )
-        for event in self.golem_base_contract.all_events():
-            logger.debug(
-                "Registered event %s with hash %s", event.signature, event.topic
-            )
-
-    @staticmethod
-    def _create_client(rpc_url: str) -> AsyncWeb3:
-        client = AsyncWeb3(
-            AsyncWeb3.AsyncHTTPProvider(rpc_url, request_kwargs={"timeout": 60}),
-        )
-        client.eth.attach_methods(
+        self.eth.attach_methods(
             {
                 "get_storage_value": Method(
                     json_rpc_method=RPCEndpoint("golembase_getStorageValue"),
@@ -188,57 +122,16 @@ class GolemBaseClient:
                 ),
             }
         )
-        return client
-
-    def http_client(self):
-        """
-        Get the underlying web3 http client
-        """
-        return self._http_client
-
-    def ws_client(self) -> AsyncWeb3:
-        """
-        Get the underlying web3 websocket client
-        """
-        return self._ws_client
-
-    async def is_connected(self) -> bool:
-        """
-        Check whether the client's underlying http client is connected
-        """
-        return await self.http_client().is_connected()
-
-    async def disconnect(self) -> None:
-        """
-        Disconnect both the underlying http and ws clients and
-        unsubscribe from all subscriptions
-        """
-        await self.http_client().provider.disconnect()
-        await self.ws_client().subscription_manager.unsubscribe_all()
-        await self.ws_client().provider.disconnect()
-
-    def get_account_address(self) -> ChecksumAddress:
-        """
-        Get the address associated with the private key that this client
-        was created with
-        """
-        return self.account.address
 
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
-        """
-        Get the storage value stored in the given entity
-        """
+        """Get the storage value stored in the given entity."""
         return base64.b64decode(
-            await self.http_client().eth.get_storage_value(entity_key.as_hex_string())
+            await self.eth.get_storage_value(entity_key.as_hex_string())  # type: ignore
         )
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
-        """
-        Get the metadata of the given entity
-        """
-        metadata = await self.http_client().eth.get_entity_metadata(
-            entity_key.as_hex_string()
-        )
+        """Get the metadata of the given entity."""
+        metadata = await self.eth.get_entity_metadata(entity_key.as_hex_string())  # type: ignore
 
         return EntityMetadata(
             entity_key=entity_key,
@@ -261,97 +154,230 @@ class GolemBaseClient:
     async def get_entities_to_expire_at_block(
         self, block_number: int
     ) -> Sequence[EntityKey]:
-        """
-        Get all entities that will expire at the given block
-        """
+        """Get all entities that will expire at the given block."""
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.http_client().eth.get_entities_to_expire_at_block(
-                    block_number
-                ),
+                await self.eth.get_entities_to_expire_at_block(block_number),  # type: ignore
             )
         )
 
     async def get_entity_count(self) -> int:
-        """
-        Get the total entity count in Golem Base
-        """
-        return await self.http_client().eth.get_entity_count()
+        """Get the total entity count in Golem Base."""
+        return await self.eth.get_entity_count()  # type: ignore
 
     async def get_all_entity_keys(self) -> Sequence[EntityKey]:
-        """
-        Get all entity keys in Golem Base
-        """
+        """Get all entity keys in Golem Base."""
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.http_client().eth.get_all_entity_keys(),
+                await self.eth.get_all_entity_keys(),  # type: ignore
             )
         )
 
     async def get_entities_of_owner(
         self, owner: ChecksumAddress
     ) -> Sequence[EntityKey]:
-        """
-        Get all the entities owned by the given address
-        """
+        """Get all the entities owned by the given address."""
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
                 # https://github.com/pylint-dev/pylint/issues/3162
                 # pylint: disable=no-member
-                await self.http_client().eth.get_entities_of_owner(owner),
+                await self.eth.get_entities_of_owner(owner),  # type: ignore
             )
         )
 
     async def query_entities(self, query: str) -> Sequence[QueryEntitiesResult]:
-        """
-        Get all entities that satisfy the given Golem Base query
-        """
+        """Get all entities that satisfy the given Golem Base query."""
         return list(
             map(
                 lambda result: QueryEntitiesResult(
                     entity_key=result.key, storage_value=base64.b64decode(result.value)
                 ),
-                await self.http_client().eth.query_entities(query),
+                await self.eth.query_entities(query),  # type: ignore
             )
         )
+
+
+class GolemBaseClient:
+    """
+    The Golem Base client used to interact with Golem Base.
+
+    Many useful methods are implemented directly on this type, while more
+    generic ethereum methods can be accessed through the underlying
+    web3 client that you can access with the
+    `GolemBaseClient.http_client()`
+    method.
+    """
+
+    _http_client: GolemBaseHttpClient
+    _ws_client: AsyncWeb3
+    _golem_base_contract: AsyncContract
+    _background_tasks: set[asyncio.Task[None]]
+
+    @staticmethod
+    async def create(
+        rpc_url: str, ws_url: str, private_key: bytes
+    ) -> "GolemBaseClient":
+        """
+        Create a `GolemBaseClient` instance.
+
+        This is the preferred method to create an instance.
+        """
+        ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
+        return GolemBaseClient(rpc_url, ws_client, private_key)
+
+    def __init__(self, rpc_url: str, ws_client: AsyncWeb3, private_key: bytes) -> None:
+        """Initialise the GolemBaseClient instance."""
+        self._http_client = GolemBaseHttpClient(rpc_url)
+        self._ws_client = ws_client
+
+        # Keep references to async tasks we created
+        self._background_tasks = set()
+
+        def is_connected(
+            client: AsyncWeb3,
+        ) -> Callable[[bool], Coroutine[Any, Any, bool]]:
+            async def inner(show_traceback: bool) -> bool:
+                try:
+                    logger.debug("Calling eth_blockNumber to test connectivity...")
+                    await client.eth.get_block_number()
+                    return True
+                except (OSError, ProviderConnectionError) as e:
+                    logger.debug(
+                        "Problem connecting to provider", exc_info=show_traceback
+                    )
+                    if show_traceback:
+                        raise ProviderConnectionError(
+                            "Problem connecting to provider"
+                        ) from e
+                    return False
+
+            return inner
+
+        # The default is_connected method calls web3_clientVersion, but the web3
+        # API is not enabled on all our nodes, so let's monkey patch this to call
+        # eth_getBlockNumber instead.
+        # The method on the provider is usually not called directly, instead you
+        # can call the eponymous method on the client, which will delegate to the
+        # provider.
+        self.http_client().provider.is_connected = is_connected(self.http_client())  # type: ignore
+
+        # Allow caching of certain methods to improve performance
+        self.http_client().provider.cache_allowed_requests = True
+
+        # Set up the ethereum account
+        self.account = self.http_client().eth.account.from_key(private_key)
+        # Inject a middleware that will sign transactions with the account that
+        # we created
+        self.http_client().middleware_onion.inject(
+            # pylint doesn't detect nested @curry annotations properly...
+            # pylint: disable=no-value-for-parameter
+            SignAndSendRawMiddlewareBuilder.build(self.account),
+            layer=0,
+        )
+        # Set the account as the default, so we don't need to specify the from field
+        # every time
+        self.http_client().eth.default_account = self.account.address
+        logger.debug("Using account: %s", self.account.address)
+
+        # https://github.com/pylint-dev/pylint/issues/3162
+        # pylint: disable=no-member
+        self.golem_base_contract = self.http_client().eth.contract(
+            address=STORAGE_ADDRESS.as_address(),
+            abi=GOLEM_BASE_ABI,
+        )
+        for event in self.golem_base_contract.all_events():
+            logger.debug(
+                "Registered event %s with hash %s", event.signature, event.topic
+            )
+
+    def http_client(self) -> GolemBaseHttpClient:
+        """Get the underlying web3 http client."""
+        return self._http_client
+
+    def ws_client(self) -> AsyncWeb3:
+        """Get the underlying web3 websocket client."""
+        return self._ws_client
+
+    async def is_connected(self) -> bool:
+        """Check whether the client's underlying http client is connected."""
+        return await self.http_client().is_connected()
+
+    async def disconnect(self) -> None:
+        """
+        Disconnect this client.
+
+        this method disconnects both the underlying http and ws clients and
+        unsubscribes from all subscriptions.
+        """
+        await self.http_client().provider.disconnect()
+        await self.ws_client().subscription_manager.unsubscribe_all()
+        await self.ws_client().provider.disconnect()
+
+    def get_account_address(self) -> ChecksumAddress:
+        """Get the address associated with the private key of this client."""
+        return self.account.address  # type: ignore
+
+    async def get_storage_value(self, entity_key: EntityKey) -> bytes:
+        """Get the storage value stored in the given entity."""
+        return await self.http_client().get_storage_value(entity_key)
+
+    async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
+        """Get the metadata of the given entity."""
+        return await self.http_client().get_entity_metadata(entity_key)
+
+    async def get_entities_to_expire_at_block(
+        self, block_number: int
+    ) -> Sequence[EntityKey]:
+        """Get all entities that will expire at the given block."""
+        return await self.http_client().get_entities_to_expire_at_block(block_number)
+
+    async def get_entity_count(self) -> int:
+        """Get the total entity count in Golem Base."""
+        return await self.http_client().get_entity_count()
+
+    async def get_all_entity_keys(self) -> Sequence[EntityKey]:
+        """Get all entity keys in Golem Base."""
+        return await self.http_client().get_all_entity_keys()
+
+    async def get_entities_of_owner(
+        self, owner: ChecksumAddress
+    ) -> Sequence[EntityKey]:
+        """Get all the entities owned by the given address."""
+        return await self.http_client().get_entities_of_owner(owner)
+
+    async def query_entities(self, query: str) -> Sequence[QueryEntitiesResult]:
+        """Get all entities that satisfy the given Golem Base query."""
+        return await self.http_client().query_entities(query)
 
     async def create_entities(
         self,
         creates: Sequence[GolemBaseCreate],
     ) -> Sequence[CreateEntityReturnType]:
-        """
-        Create entities in Golem Base
-        """
+        """Create entities in Golem Base."""
         return (await self.send_transaction(creates=creates)).creates
 
     async def update_entities(
         self,
         updates: Sequence[GolemBaseUpdate],
     ) -> Sequence[UpdateEntityReturnType]:
-        """
-        Update entities in Golem Base
-        """
+        """Update entities in Golem Base."""
         return (await self.send_transaction(updates=updates)).updates
 
     async def delete_entities(
         self,
         deletes: Sequence[GolemBaseDelete],
     ) -> Sequence[EntityKey]:
-        """
-        Delete entities from Golem Base
-        """
+        """Delete entities from Golem Base."""
         return (await self.send_transaction(deletes=deletes)).deletes
 
     async def extend_entities(
         self,
         extensions: Sequence[GolemBaseExtend],
     ) -> Sequence[ExtendEntityReturnType]:
-        """
-        Extend the BTL of entities in Golem Base
-        """
+        """Extend the BTL of entities in Golem Base."""
         return (await self.send_transaction(extensions=extensions)).extensions
 
     async def send_transaction(
@@ -363,8 +389,9 @@ class GolemBaseClient:
     ) -> GolemBaseTransactionReceipt:
         """
         Send a generic transaction to Golem Base.
+
         This transaction can contain multiple create, update, delete and
-        extend operations
+        extend operations.
         """
         tx = GolemBaseTransaction(
             creates,
@@ -387,10 +414,10 @@ class GolemBaseClient:
         # Use the event to process the whole log
         event_data = event.process_log(log_receipt)
 
-        creates: List[CreateEntityReturnType] = []
-        updates: List[UpdateEntityReturnType] = []
-        deletes: List[EntityKey] = []
-        extensions: List[ExtendEntityReturnType] = []
+        creates: list[CreateEntityReturnType] = []
+        updates: list[UpdateEntityReturnType] = []
+        deletes: list[EntityKey] = []
+        extensions: list[ExtendEntityReturnType] = []
 
         match event_data["event"]:
             case "GolemBaseStorageEntityCreated":
@@ -467,10 +494,10 @@ class GolemBaseClient:
             for log in receipt["logs"]:
                 yield await self._process_golem_base_log_receipt(log)
 
-        creates: List[CreateEntityReturnType] = []
-        updates: List[UpdateEntityReturnType] = []
-        deletes: List[EntityKey] = []
-        extensions: List[ExtendEntityReturnType] = []
+        creates: list[CreateEntityReturnType] = []
+        updates: list[UpdateEntityReturnType] = []
+        deletes: list[EntityKey] = []
+        extensions: list[ExtendEntityReturnType] = []
 
         async for res in process_receipt(receipt):
             creates.extend(res.creates)
@@ -509,6 +536,7 @@ class GolemBaseClient:
     ) -> None:
         """
         Subscribe to events on Golem Base.
+
         You can pass in four different callbacks, and the right one will
         be invoked for every create, update, delete, and extend operation.
         """
@@ -558,7 +586,7 @@ class GolemBaseClient:
         task = asyncio.create_task(handle_subscriptions())
         self._background_tasks.add(task)
 
-        def task_done(task: asyncio.Task) -> None:
+        def task_done(task: asyncio.Task[None]) -> None:
             logger.info("Subscription background task done, removing...")
             self._background_tasks.discard(task)
 

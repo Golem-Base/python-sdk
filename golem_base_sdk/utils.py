@@ -1,6 +1,4 @@
-"""
-Utility methods
-"""
+"""Utility methods."""
 
 import logging
 
@@ -16,15 +14,11 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
-"""
-@private
-"""
+"""@private"""
 
 
 def rlp_encode_transaction(tx: GolemBaseTransaction) -> bytes:
-    """
-    Encode a Golem Base transaction in RLP
-    """
+    """Encode a Golem Base transaction in RLP."""
 
     def format_annotation[T](annotation: Annotation[T]) -> tuple[str, T]:
         return (annotation.key, annotation.value)
@@ -76,13 +70,15 @@ def rlp_encode_transaction(tx: GolemBaseTransaction) -> bytes:
         ),
     ]
     logger.debug("Payload before RLP encoding: %s", payload)
-    encoded = rlp.encode(payload)
+    encoded: bytes = rlp.encode(payload)  # type: ignore
     logger.debug("Encoded  payload: %s", encoded)
     return encoded
 
 
 def parse_legacy_btl_extended_log(log_receipt: LogReceipt) -> ExtendEntityReturnType:
     """
+    Parse legacy BTL extended logs.
+
     For legacy extend ABI types, the type signature in the ABI does
     not correspond to the actual data returned, so we need
     to parse the data ourselves.

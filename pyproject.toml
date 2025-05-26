@@ -22,3 +22,33 @@ Homepage = "https://github.com/Golem-Base/"
 Documentation = "https://golem-base.github.io/python-sdk/golem_base_sdk.html"
 Repository = "https://github.com/Golem-Base/python-sdk"
 Issues = "https://github.com/Golem-Base/python-sdk/issues"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+    "ASYNC",
+    "PL",
+    "D"
+]
+ignore = [
+  "D203",
+  "D212"
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
