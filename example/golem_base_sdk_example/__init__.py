@@ -9,6 +9,7 @@ import logging.config
 
 from xdg import BaseDirectory
 
+import anyio
 from golem_base_sdk import (
     Annotation,
     GolemBaseClient,
@@ -62,15 +63,12 @@ INSTANCE_URLS = {
 
 
 async def run_example(instance: str) -> None:
-    """
-    connect
-    """
-
-    with open(
+    """Run the example."""
+    async with await anyio.open_file(
         BaseDirectory.xdg_config_home + "/golembase/private.key",
         "rb",
     ) as private_key_file:
-        key_bytes = private_key_file.readline()
+        key_bytes = await private_key_file.read(32)
 
     client = await GolemBaseClient.create(
         rpc_url=INSTANCE_URLS[instance]["rpc"],

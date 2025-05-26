@@ -53,6 +53,7 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   propagatedBuildInputs = [
+    pkgs.python3Packages.anyio
     pkgs.python3Packages.pyxdg
     perSystem.golem-base-sdk.golem-base-sdk
   ];
