@@ -5,17 +5,22 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "golem-base-sdk-example"
 authors = [
-    {name = "Ramses", email = "ramses@well-founded.dev"},
+    {name = "rvdp", email = "online@well-founded.dev"},
 ]
-readme = "README.md"
+version = "0.0.1"
 license = "GPL-3.0-only"
-requires-python = ">=3.5"
-dynamic = ["version", "description"]
+requires-python = ">=3.12"
+dynamic = ["description"]
+classifiers = ["Private :: Do Not Upload"]
 
 dependencies = [
-  "web3",
-  "pyxdg",
+    "anyio>=4.9.0",
+    "golem-base-sdk",
+    "pyxdg>=0.28",
 ]
+
+[project.scripts]
+main = "golem_base_sdk_example:main"
 
 [tool.ruff.lint]
 select = [
@@ -47,5 +52,30 @@ unfixable = []
 quote-style = "double"
 indent-style = "space"
 
-[project.scripts]
-main = "golem_base_sdk_example:main"
+[tool.mypy]
+strict = false
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+follow_imports = "normal"
+ignore_missing_imports = true
+no_implicit_reexport = true
+check_untyped_defs = true
+show_error_codes = true
+show_error_context = true
+strict_equality = true
+strict_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = false
+
+[tool.pylsp-mypy]
+enabled = true
+live_mode = true
+strict = false
+report_progress = true
+
+[tool.uv.sources]
+golem-base-sdk = { path = "../", editable = true }

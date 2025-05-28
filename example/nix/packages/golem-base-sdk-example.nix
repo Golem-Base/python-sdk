@@ -1,78 +1,83 @@
 {
   pkgs,
-  pname,
-  perSystem,
+  inputs,
   ...
 }:
 
 let
   inherit (pkgs) lib;
 
-  types-pyxdg =
-    let
-      pname = "types-pyxdg";
-      version = "0.28.0.20240106";
-    in
-    pkgs.python3Packages.buildPythonPackage {
-      inherit pname version;
-      format = "pyproject";
+  # We need an actual path here, because of the editable install used below
+  src = ../..;
 
-      src = pkgs.fetchPypi {
-        inherit pname version;
-        hash = "sha256-UF/GOG2MCl0KkUzrK3bo4tvQsRAhK1s5Xb6xyUg+24g=";
-      };
+  workspace = inputs.uv2nix.lib.workspace.loadWorkspace {
+    workspaceRoot = src;
+  };
 
-      nativeBuildInputs = [ pkgs.python3Packages.setuptools ];
-    };
+  overlay = workspace.mkPyprojectOverlay {
+    sourcePreference = "wheel";
+  };
 
+  pythonSet =
+    (pkgs.callPackage inputs.pyproject-nix.build.packages {
+      python = pkgs.python312;
+    }).overrideScope
+      (
+        lib.composeManyExtensions [
+          inputs.pyproject-build-systems.overlays.default
+          overlay
+        ]
+      );
+
+  inherit (pkgs.callPackages inputs.pyproject-nix.build.util { }) mkApplication;
+
+  editableOverlay = workspace.mkEditablePyprojectOverlay {
+    # This env var needs to be set to the root of the repo in the shell that runs the
+    # application, otherwise python will not import golem_base_sdk from the right place
+    root = "$REPO_ROOT/example";
+    # Only enable editable for this package
+    members = [ "golem-base-sdk" ];
+  };
+
+  editablePythonSet = pythonSet.overrideScope (
+    lib.composeManyExtensions [
+      editableOverlay
+
+      # Apply fixups for building an editable package of your workspace packages
+      (final: prev: {
+        golem-base-sdk = prev.golem-base-sdk.overrideAttrs (old: {
+          # We need the editables build system added here
+          nativeBuildInputs =
+            old.nativeBuildInputs
+            ++ final.resolveBuildSystem {
+              editables = [ ];
+            };
+        });
+      })
+    ]
+  );
+
+  virtualenv = editablePythonSet.mkVirtualEnv "golem-base-sdk-example-env" workspace.deps.default;
+  virtualenvDev = editablePythonSet.mkVirtualEnv "golem-base-sdk-example-env" workspace.deps.all;
 in
 
-pkgs.python3Packages.buildPythonPackage {
-  inherit pname;
-  version = "0.0.1";
+mkApplication {
+  venv = virtualenv;
+  package = pythonSet.golem-base-sdk-example.overrideAttrs (prevAttrs: {
+    nativeCheckInputs = [
+      pkgs.mypy
+      pkgs.ruff
+    ];
 
-  format = "pyproject";
+    doCheck = true;
 
-  src = lib.fileset.toSource {
-    root = ../..;
-    fileset = lib.fileset.unions (
-      map (lib.path.append ../..) [
-        "pyproject.toml"
-        "golem_base_sdk_example"
-        "README.md"
-      ]
-    );
-  };
+    checkPhase = ''
+      mypy golem_base_sdk_example
+      ruff check --no-cache golem_base_sdk_example
+    '';
 
-  nativeBuildInputs = [
-    pkgs.python3Packages.flit-core
-  ];
-
-  buildInputs = [
-    types-pyxdg
-  ];
-
-  propagatedBuildInputs = [
-    pkgs.python3Packages.anyio
-    pkgs.python3Packages.pyxdg
-    perSystem.golem-base-sdk.golem-base-sdk
-  ];
-
-  nativeCheckInputs = [
-    pkgs.mypy
-    pkgs.pylint
-    pkgs.ruff
-  ];
-
-  checkPhase = ''
-    mypy golem_base_sdk_example
-    ruff check --no-cache golem_base_sdk_example
-  '';
-
-  meta = with lib; {
-    homepage = "";
-    description = "";
-    license = licenses.gpl3Only;
-    platforms = platforms.linux ++ platforms.darwin;
-  };
+    passthru = (prevAttrs.passthru or { }) // {
+      inherit virtualenv virtualenvDev;
+    };
+  });
 }
