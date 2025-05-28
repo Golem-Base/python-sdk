@@ -7,13 +7,13 @@ import logging.config
 import typing
 from collections.abc import (
     AsyncGenerator,
+    Callable,
     Coroutine,
     Sequence,
 )
 from typing import (
     Any,
-    Callable,
-    Optional,
+    cast,
 )
 
 from eth_typing import ChecksumAddress, HexStr
@@ -48,6 +48,7 @@ from .types import (
     GolemBaseUpdate,
     QueryEntitiesResult,
     UpdateEntityReturnType,
+    WatchLogsHandle,
 )
 from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
 
@@ -126,12 +127,16 @@ class GolemBaseHttpClient(AsyncWeb3):
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """Get the storage value stored in the given entity."""
         return base64.b64decode(
-            await self.eth.get_storage_value(entity_key.as_hex_string())  # type: ignore
+            await self.eth.get_storage_value(  # type: ignore[attr-defined]
+                entity_key.as_hex_string()
+            )
         )
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
         """Get the metadata of the given entity."""
-        metadata = await self.eth.get_entity_metadata(entity_key.as_hex_string())  # type: ignore
+        metadata = await self.eth.get_entity_metadata(  # type: ignore[attr-defined]
+            entity_key.as_hex_string()
+        )
 
         return EntityMetadata(
             entity_key=entity_key,
@@ -158,20 +163,22 @@ class GolemBaseHttpClient(AsyncWeb3):
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.eth.get_entities_to_expire_at_block(block_number),  # type: ignore
+                await self.eth.get_entities_to_expire_at_block(  # type: ignore[attr-defined]
+                    block_number
+                ),
             )
         )
 
     async def get_entity_count(self) -> int:
         """Get the total entity count in Golem Base."""
-        return await self.eth.get_entity_count()  # type: ignore
+        return cast(int, await self.eth.get_entity_count())  # type: ignore[attr-defined]
 
     async def get_all_entity_keys(self) -> Sequence[EntityKey]:
         """Get all entity keys in Golem Base."""
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.eth.get_all_entity_keys(),  # type: ignore
+                await self.eth.get_all_entity_keys(),  # type: ignore[attr-defined]
             )
         )
 
@@ -182,9 +189,7 @@ class GolemBaseHttpClient(AsyncWeb3):
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                # https://github.com/pylint-dev/pylint/issues/3162
-                # pylint: disable=no-member
-                await self.eth.get_entities_of_owner(owner),  # type: ignore
+                await self.eth.get_entities_of_owner(owner),  # type: ignore[attr-defined]
             )
         )
 
@@ -195,7 +200,7 @@ class GolemBaseHttpClient(AsyncWeb3):
                 lambda result: QueryEntitiesResult(
                     entity_key=result.key, storage_value=base64.b64decode(result.value)
                 ),
-                await self.eth.query_entities(query),  # type: ignore
+                await self.eth.query_entities(query),  # type: ignore[attr-defined]
             )
         )
 
@@ -227,6 +232,24 @@ class GolemBaseClient:
         """
         ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
         return GolemBaseClient(rpc_url, ws_client, private_key)
+
+    async def _start_subscription_loop(self) -> None:
+        """Create a long running task to handle subscriptions."""
+        # The loop will finish when there are no subscriptions left, so this method
+        # gets called every time a subscription is created, and we'll check
+        # whether we need to make a new task or whether one is already running.
+        if not self._background_tasks:
+            # Start the asyncio event loop
+            task = asyncio.create_task(
+                self.ws_client().subscription_manager.handle_subscriptions()
+            )
+            self._background_tasks.add(task)
+
+            def task_done(task: asyncio.Task[None]) -> None:
+                logger.info("Subscription background task done, removing...")
+                self._background_tasks.discard(task)
+
+            task.add_done_callback(task_done)
 
     def __init__(self, rpc_url: str, ws_client: AsyncWeb3, private_key: bytes) -> None:
         """Initialise the GolemBaseClient instance."""
@@ -262,7 +285,11 @@ class GolemBaseClient:
         # The method on the provider is usually not called directly, instead you
         # can call the eponymous method on the client, which will delegate to the
         # provider.
-        self.http_client().provider.is_connected = is_connected(self.http_client())  # type: ignore
+        object.__setattr__(
+            self.http_client().provider,
+            "is_connected",
+            is_connected(self.http_client()),
+        )
 
         # Allow caching of certain methods to improve performance
         self.http_client().provider.cache_allowed_requests = True
@@ -303,7 +330,7 @@ class GolemBaseClient:
 
     async def is_connected(self) -> bool:
         """Check whether the client's underlying http client is connected."""
-        return await self.http_client().is_connected()
+        return cast(bool, await self.http_client().is_connected())  # type: ignore[redundant-cast]
 
     async def disconnect(self) -> None:
         """
@@ -318,7 +345,7 @@ class GolemBaseClient:
 
     def get_account_address(self) -> ChecksumAddress:
         """Get the address associated with the private key of this client."""
-        return self.account.address  # type: ignore
+        return cast(ChecksumAddress, self.account.address)
 
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """Get the storage value stored in the given entity."""
@@ -382,10 +409,10 @@ class GolemBaseClient:
 
     async def send_transaction(
         self,
-        creates: Optional[Sequence[GolemBaseCreate]] = None,
-        updates: Optional[Sequence[GolemBaseUpdate]] = None,
-        deletes: Optional[Sequence[GolemBaseDelete]] = None,
-        extensions: Optional[Sequence[GolemBaseExtend]] = None,
+        creates: Sequence[GolemBaseCreate] | None = None,
+        updates: Sequence[GolemBaseUpdate] | None = None,
+        deletes: Sequence[GolemBaseDelete] | None = None,
+        extensions: Sequence[GolemBaseExtend] | None = None,
     ) -> GolemBaseTransactionReceipt:
         """
         Send a generic transaction to Golem Base.
@@ -529,11 +556,13 @@ class GolemBaseClient:
 
     async def watch_logs(
         self,
-        create_callback: Callable[[CreateEntityReturnType], None],
-        update_callback: Callable[[UpdateEntityReturnType], None],
-        delete_callback: Callable[[EntityKey], None],
-        extend_callback: Callable[[ExtendEntityReturnType], None],
-    ) -> None:
+        *,
+        label: str,
+        create_callback: Callable[[CreateEntityReturnType], None] | None = None,
+        update_callback: Callable[[UpdateEntityReturnType], None] | None = None,
+        delete_callback: Callable[[EntityKey], None] | None = None,
+        extend_callback: Callable[[ExtendEntityReturnType], None] | None = None,
+    ) -> WatchLogsHandle:
         """
         Subscribe to events on Golem Base.
 
@@ -550,18 +579,22 @@ class GolemBaseClient:
             logger.debug("New log: %s", log_receipt)
             res = await self._process_golem_base_log_receipt(log_receipt)
 
-            for create in res.creates:
-                create_callback(create)
-            for update in res.updates:
-                update_callback(update)
-            for key in res.deletes:
-                delete_callback(key)
-            for extension in res.extensions:
-                extend_callback(extension)
+            if create_callback:
+                for create in res.creates:
+                    create_callback(create)
+            if update_callback:
+                for update in res.updates:
+                    update_callback(update)
+            if delete_callback:
+                for key in res.deletes:
+                    delete_callback(key)
+            if extend_callback:
+                for extension in res.extensions:
+                    extend_callback(extension)
 
         def create_subscription(topic: HexStr) -> LogsSubscription:
             return LogsSubscription(
-                label=f"Golem Base subscription to topic {topic}",
+                label=f"Golem Base subscription to topic {topic} with label {label}",
                 address=self.golem_base_contract.address,
                 topics=[topic],
                 handler=log_handler,
@@ -569,25 +602,39 @@ class GolemBaseClient:
                 handler_context={},
             )
 
-        async def handle_subscriptions() -> None:
-            await self._ws_client.subscription_manager.subscribe(
-                list(
-                    map(
-                        lambda event: create_subscription(event.topic),
-                        self.golem_base_contract.all_events(),
-                    )
-                ),
+        event_names = []
+        if create_callback:
+            event_names.append("GolemBaseStorageEntityCreated")
+        if update_callback:
+            event_names.append("GolemBaseStorageEntityUpdated")
+        if delete_callback:
+            event_names.append("GolemBaseStorageEntityDeleted")
+        if extend_callback:
+            event_names.extend(
+                [
+                    "GolemBaseStorageEntityBTLExtended",
+                    "GolemBaseStorageEntityBTLExptended",
+                    "GolemBaseStorageEntityTTLExptended",
+                ]
             )
-            # handle subscriptions via configured handlers:
-            await self.ws_client().subscription_manager.handle_subscriptions()
 
-        # Create a long running task to handle subscriptions that we can run on
-        # the asyncio event loop
-        task = asyncio.create_task(handle_subscriptions())
-        self._background_tasks.add(task)
+        events = list(
+            map(
+                lambda event_name: create_subscription(
+                    self.golem_base_contract.get_event_by_name(event_name).topic
+                ),
+                event_names,
+            )
+        )
+        subscription_ids = await self._ws_client.subscription_manager.subscribe(
+            events,
+        )
+        logger.info("Sub ID: %s", subscription_ids)
 
-        def task_done(task: asyncio.Task[None]) -> None:
-            logger.info("Subscription background task done, removing...")
-            self._background_tasks.discard(task)
+        # Start a subscription loop in case there is none running
+        await self._start_subscription_loop()
 
-        task.add_done_callback(task_done)
+        async def unsubscribe() -> None:
+            await self._ws_client.subscription_manager.unsubscribe(subscription_ids)
+
+        return WatchLogsHandle(_unsubscribe=unsubscribe)

@@ -59,7 +59,7 @@ INSTANCE_URLS = {
 }
 
 
-async def run_example(instance: str) -> None:
+async def run_example(instance: str) -> None:  # noqa: PLR0915
     """Run the example."""
     async with await anyio.open_file(
         BaseDirectory.xdg_config_home + "/golembase/private.key",
@@ -73,26 +73,31 @@ async def run_example(instance: str) -> None:
         private_key=key_bytes,
     )
 
-    await client.watch_logs(
-        lambda create: logger.info(
+    watch_logs_handle = await client.watch_logs(
+        label="first",
+        create_callback=lambda create: logger.info(
             """\n
 Got create event: %s
         """,
             create,
         ),
-        lambda update: logger.info(
+        update_callback=lambda update: logger.info(
             """\n
 Got update event: %s
         """,
             update,
         ),
-        lambda deleted_key: logger.info(
+    )
+
+    await client.watch_logs(
+        label="second",
+        delete_callback=lambda deleted_key: logger.info(
             """\n
 Got delete event: %s
         """,
             deleted_key,
         ),
-        lambda extension: logger.info(
+        extend_callback=lambda extension: logger.info(
             """\n
 Got extend event: %s
         """,
@@ -170,11 +175,11 @@ Got extend event: %s
         logger.info(
             "block number: %s", await client.http_client().eth.get_block_number()
         )
-        update_receipt = await client.update_entities(
+        [update_receipt] = await client.update_entities(
             [GolemBaseUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
         )
         logger.info("receipt: %s", update_receipt)
-        entity_key = update_receipt[0].entity_key
+        entity_key = update_receipt.entity_key
 
         logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
 
@@ -210,6 +215,8 @@ Got extend event: %s
             "All entities: %s",
             await client.get_all_entity_keys(),
         )
+
+        await watch_logs_handle.unsubscribe()
     else:
         logger.warning("Could not connect to the API...")
 

@@ -8,7 +8,7 @@ let
   inherit (pkgs) lib;
 in
 
-pkgs.python3Packages.buildPythonPackage rec {
+pkgs.python3Packages.buildPythonPackage {
   inherit pname;
   version = "0.0.1";
 
@@ -46,15 +46,8 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    cat <<EOF >./mypy.conf
-      [mypy]
-
-      [mypy-rlp.*]
-      follow_untyped_imports = True
-    EOF
-    mypy --config-file ${../../mypy.ini} ${src}/golem_base_sdk
-    ruff check --no-cache ${src}/golem_base_sdk
-    PYLINTHOME="$TMPDIR" pylint ${src}/golem_base_sdk
+    mypy golem_base_sdk
+    ruff check --no-cache golem_base_sdk
   '';
 
   meta = with lib; {
