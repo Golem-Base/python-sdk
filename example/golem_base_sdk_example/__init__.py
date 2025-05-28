@@ -16,8 +16,6 @@ from golem_base_sdk import (
 )
 from xdg import BaseDirectory
 
-__version__ = "0.0.1"
-
 logging.config.dictConfig(
     {
         "version": 1,
