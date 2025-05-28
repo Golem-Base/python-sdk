@@ -49,6 +49,37 @@ ignore = [
 fixable = ["ALL"]
 unfixable = []
 
+[tool.ruff.lint.pylint]
+max-args = 10
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.mypy]
+strict = false
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+follow_imports = "normal"
+ignore_missing_imports = true
+no_implicit_reexport = true
+check_untyped_defs = true
+show_error_codes = true
+show_error_context = true
+strict_equality = true
+strict_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+# For some reason, we get a lot of errors from this in the nix build,
+# but fixing those leads to errors in the editor.
+# TODO: figure out why that is
+warn_unused_ignores = false
+
+[tool.pylsp-mypy]
+enabled = true
+live_mode = true
+strict = false
+report_progress = true

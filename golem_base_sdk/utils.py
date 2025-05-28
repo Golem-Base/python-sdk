@@ -70,7 +70,7 @@ def rlp_encode_transaction(tx: GolemBaseTransaction) -> bytes:
         ),
     ]
     logger.debug("Payload before RLP encoding: %s", payload)
-    encoded: bytes = rlp.encode(payload)  # type: ignore
+    encoded: bytes = rlp.encode(payload)
     logger.debug("Encoded  payload: %s", encoded)
     return encoded
 

@@ -7,13 +7,13 @@ import logging.config
 import typing
 from collections.abc import (
     AsyncGenerator,
+    Callable,
     Coroutine,
     Sequence,
 )
 from typing import (
     Any,
-    Callable,
-    Optional,
+    cast,
 )
 
 from eth_typing import ChecksumAddress, HexStr
@@ -127,12 +127,16 @@ class GolemBaseHttpClient(AsyncWeb3):
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """Get the storage value stored in the given entity."""
         return base64.b64decode(
-            await self.eth.get_storage_value(entity_key.as_hex_string())  # type: ignore
+            await self.eth.get_storage_value(  # type: ignore[attr-defined]
+                entity_key.as_hex_string()
+            )
         )
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
         """Get the metadata of the given entity."""
-        metadata = await self.eth.get_entity_metadata(entity_key.as_hex_string())  # type: ignore
+        metadata = await self.eth.get_entity_metadata(  # type: ignore[attr-defined]
+            entity_key.as_hex_string()
+        )
 
         return EntityMetadata(
             entity_key=entity_key,
@@ -159,20 +163,22 @@ class GolemBaseHttpClient(AsyncWeb3):
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.eth.get_entities_to_expire_at_block(block_number),  # type: ignore
+                await self.eth.get_entities_to_expire_at_block(  # type: ignore[attr-defined]
+                    block_number
+                ),
             )
         )
 
     async def get_entity_count(self) -> int:
         """Get the total entity count in Golem Base."""
-        return await self.eth.get_entity_count()  # type: ignore
+        return cast(int, await self.eth.get_entity_count())  # type: ignore[attr-defined]
 
     async def get_all_entity_keys(self) -> Sequence[EntityKey]:
         """Get all entity keys in Golem Base."""
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                await self.eth.get_all_entity_keys(),  # type: ignore
+                await self.eth.get_all_entity_keys(),  # type: ignore[attr-defined]
             )
         )
 
@@ -183,9 +189,7 @@ class GolemBaseHttpClient(AsyncWeb3):
         return list(
             map(
                 lambda e: EntityKey(GenericBytes.from_hex_string(e)),
-                # https://github.com/pylint-dev/pylint/issues/3162
-                # pylint: disable=no-member
-                await self.eth.get_entities_of_owner(owner),  # type: ignore
+                await self.eth.get_entities_of_owner(owner),  # type: ignore[attr-defined]
             )
         )
 
@@ -196,7 +200,7 @@ class GolemBaseHttpClient(AsyncWeb3):
                 lambda result: QueryEntitiesResult(
                     entity_key=result.key, storage_value=base64.b64decode(result.value)
                 ),
-                await self.eth.query_entities(query),  # type: ignore
+                await self.eth.query_entities(query),  # type: ignore[attr-defined]
             )
         )
 
@@ -281,7 +285,11 @@ class GolemBaseClient:
         # The method on the provider is usually not called directly, instead you
         # can call the eponymous method on the client, which will delegate to the
         # provider.
-        self.http_client().provider.is_connected = is_connected(self.http_client())  # type: ignore
+        object.__setattr__(
+            self.http_client().provider,
+            "is_connected",
+            is_connected(self.http_client()),
+        )
 
         # Allow caching of certain methods to improve performance
         self.http_client().provider.cache_allowed_requests = True
@@ -322,7 +330,7 @@ class GolemBaseClient:
 
     async def is_connected(self) -> bool:
         """Check whether the client's underlying http client is connected."""
-        return await self.http_client().is_connected()
+        return cast(bool, await self.http_client().is_connected())  # type: ignore[redundant-cast]
 
     async def disconnect(self) -> None:
         """
@@ -337,7 +345,7 @@ class GolemBaseClient:
 
     def get_account_address(self) -> ChecksumAddress:
         """Get the address associated with the private key of this client."""
-        return self.account.address  # type: ignore
+        return cast(ChecksumAddress, self.account.address)
 
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
         """Get the storage value stored in the given entity."""
@@ -401,10 +409,10 @@ class GolemBaseClient:
 
     async def send_transaction(
         self,
-        creates: Optional[Sequence[GolemBaseCreate]] = None,
-        updates: Optional[Sequence[GolemBaseUpdate]] = None,
-        deletes: Optional[Sequence[GolemBaseDelete]] = None,
-        extensions: Optional[Sequence[GolemBaseExtend]] = None,
+        creates: Sequence[GolemBaseCreate] | None = None,
+        updates: Sequence[GolemBaseUpdate] | None = None,
+        deletes: Sequence[GolemBaseDelete] | None = None,
+        extensions: Sequence[GolemBaseExtend] | None = None,
     ) -> GolemBaseTransactionReceipt:
         """
         Send a generic transaction to Golem Base.
@@ -548,11 +556,13 @@ class GolemBaseClient:
 
     async def watch_logs(
         self,
-        create_callback: Callable[[CreateEntityReturnType], None],
-        update_callback: Callable[[UpdateEntityReturnType], None],
-        delete_callback: Callable[[EntityKey], None],
-        extend_callback: Callable[[ExtendEntityReturnType], None],
-    ) -> None:
+        *,
+        label: str,
+        create_callback: Callable[[CreateEntityReturnType], None] | None = None,
+        update_callback: Callable[[UpdateEntityReturnType], None] | None = None,
+        delete_callback: Callable[[EntityKey], None] | None = None,
+        extend_callback: Callable[[ExtendEntityReturnType], None] | None = None,
+    ) -> WatchLogsHandle:
         """
         Subscribe to events on Golem Base.
 

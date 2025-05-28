@@ -1,10 +1,10 @@
 """Golem Base SDK Types."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import (
+    Any,
     NewType,
-    Optional,
     override,
 )
 
@@ -106,10 +106,10 @@ class GolemBaseTransaction:
 
     def __init__(
         self,
-        creates: Optional[Sequence[GolemBaseCreate]] = None,
-        updates: Optional[Sequence[GolemBaseUpdate]] = None,
-        deletes: Optional[Sequence[GolemBaseDelete]] = None,
-        extensions: Optional[Sequence[GolemBaseExtend]] = None,
+        creates: Sequence[GolemBaseCreate] | None = None,
+        updates: Sequence[GolemBaseUpdate] | None = None,
+        deletes: Sequence[GolemBaseDelete] | None = None,
+        extensions: Sequence[GolemBaseExtend] | None = None,
     ):
         """Initialise the GolemBaseTransaction instance."""
         object.__setattr__(self, "creates", creates or [])

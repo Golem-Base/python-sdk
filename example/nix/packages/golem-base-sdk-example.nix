@@ -27,7 +27,7 @@ let
 
 in
 
-pkgs.python3Packages.buildPythonPackage rec {
+pkgs.python3Packages.buildPythonPackage {
   inherit pname;
   version = "0.0.1";
 
@@ -65,9 +65,8 @@ pkgs.python3Packages.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    mypy --config ${../../../mypy.ini} ${src}/golem_base_sdk_example
-    ruff check --no-cache ${src}/golem_base_sdk_example
-    PYLINTHOME="$TMPDIR" pylint ${src}/golem_base_sdk_example
+    mypy golem_base_sdk_example
+    ruff check --no-cache golem_base_sdk_example
   '';
 
   meta = with lib; {

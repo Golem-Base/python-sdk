@@ -59,7 +59,7 @@ INSTANCE_URLS = {
 }
 
 
-async def run_example(instance: str) -> None:
+async def run_example(instance: str) -> None:  # noqa: PLR0915
     """Run the example."""
     async with await anyio.open_file(
         BaseDirectory.xdg_config_home + "/golembase/private.key",
@@ -175,11 +175,11 @@ Got extend event: %s
         logger.info(
             "block number: %s", await client.http_client().eth.get_block_number()
         )
-        update_receipt = await client.update_entities(
+        [update_receipt] = await client.update_entities(
             [GolemBaseUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
         )
         logger.info("receipt: %s", update_receipt)
-        entity_key = update_receipt[0].entity_key
+        entity_key = update_receipt.entity_key
 
         logger.info("entity metadata: %s", await client.get_entity_metadata(entity_key))
 
