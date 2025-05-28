@@ -6,16 +6,6 @@
 
 let
   inherit (pkgs) lib;
-<<<<<<< HEAD
-in
-
-pkgs.python3Packages.buildPythonPackage {
-  inherit pname;
-  version = "0.0.1";
-
-  format = "pyproject";
-=======
->>>>>>> ee9bc76 (feat: move to uv for dependency management)
 
   src = lib.fileset.toSource {
     root = ../..;
@@ -30,42 +20,10 @@ pkgs.python3Packages.buildPythonPackage {
     );
   };
 
-<<<<<<< HEAD
-  nativeBuildInputs = [
-    pkgs.python3Packages.flit-core
-  ];
-
-  buildInputs = [
-    pkgs.python3Packages.pyunormalize
-  ];
-
-  propagatedBuildInputs = [
-    pkgs.python3Packages.web3
-    pkgs.python3Packages.rlp
-  ];
-
-  nativeCheckInputs = [
-    pkgs.mypy
-    pkgs.pylint
-    pkgs.ruff
-  ];
-
-  checkPhase = ''
-    mypy golem_base_sdk
-    ruff check --no-cache golem_base_sdk
-  '';
-
-  meta = with lib; {
-    homepage = "";
-    description = "";
-    license = licenses.gpl3Only;
-    platforms = platforms.linux ++ platforms.darwin;
-=======
   # Load a uv workspace from a workspace root.
   # Uv2nix treats all uv projects as workspace projects.
   workspace = inputs.uv2nix.lib.workspace.loadWorkspace {
     workspaceRoot = src;
->>>>>>> ee9bc76 (feat: move to uv for dependency management)
   };
 
   # Create package overlay from workspace.
