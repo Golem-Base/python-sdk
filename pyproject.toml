@@ -7,14 +7,15 @@ name = "golem-base-sdk"
 authors = [
     {name = "rvdp", email = "online@well-founded.dev"},
 ]
+version = "0.0.3"
 readme = "README.md"
 license = "GPL-3.0-only"
-requires-python = ">=3.5"
-dynamic = ["version", "description"]
+requires-python = ">=3.12"
+dynamic = ["description"]
 
 dependencies = [
-  "web3",
-  "rlp",
+  "rlp>=1.2.0",
+  "web3>=4.7.2",
 ]
 
 [project.urls]
@@ -83,3 +84,9 @@ enabled = true
 live_mode = true
 strict = false
 report_progress = true
+
+[dependency-groups]
+dev = [
+    "pylsp-mypy>=0.7.0",
+    "python-lsp-server>=1.12.2",
+]
