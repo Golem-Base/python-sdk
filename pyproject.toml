@@ -87,6 +87,7 @@ report_progress = true
 
 [dependency-groups]
 dev = [
+    "pdoc>=15.0.3",
     "pylsp-mypy>=0.7.0",
     "python-lsp-server>=1.12.2",
 ]

@@ -65,3 +65,8 @@ jobs:
           nix develop --no-write-lock-file --reference-lock-file ../flake.lock --command
           ./result/bin/main --instance local
         working-directory: ./example
+
+      - name: Build the docs files
+        id: build
+        run: |
+          nix develop --command pdoc golem_base_sdk -o docs
