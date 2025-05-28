@@ -18,6 +18,14 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
+      - name: Build the SDK
+        run: >
+          nix build .#golem-base-sdk --no-write-lock-file
+
+      - name: Build the SDK dist
+        run: >
+          nix build .#golem-base-sdk.dist --no-write-lock-file
+
       - name: Build the example SDK app
         run: >
           nix build .#golem-base-sdk-example --no-write-lock-file --reference-lock-file
