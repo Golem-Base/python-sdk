@@ -48,6 +48,7 @@ from .types import (
     GolemBaseUpdate,
     QueryEntitiesResult,
     UpdateEntityReturnType,
+    WatchLogsHandle,
 )
 from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
 
@@ -227,6 +228,24 @@ class GolemBaseClient:
         """
         ws_client = await AsyncWeb3(WebSocketProvider(ws_url))
         return GolemBaseClient(rpc_url, ws_client, private_key)
+
+    async def _start_subscription_loop(self) -> None:
+        """Create a long running task to handle subscriptions."""
+        # The loop will finish when there are no subscriptions left, so this method
+        # gets called every time a subscription is created, and we'll check
+        # whether we need to make a new task or whether one is already running.
+        if not self._background_tasks:
+            # Start the asyncio event loop
+            task = asyncio.create_task(
+                self.ws_client().subscription_manager.handle_subscriptions()
+            )
+            self._background_tasks.add(task)
+
+            def task_done(task: asyncio.Task[None]) -> None:
+                logger.info("Subscription background task done, removing...")
+                self._background_tasks.discard(task)
+
+            task.add_done_callback(task_done)
 
     def __init__(self, rpc_url: str, ws_client: AsyncWeb3, private_key: bytes) -> None:
         """Initialise the GolemBaseClient instance."""
@@ -550,18 +569,22 @@ class GolemBaseClient:
             logger.debug("New log: %s", log_receipt)
             res = await self._process_golem_base_log_receipt(log_receipt)
 
-            for create in res.creates:
-                create_callback(create)
-            for update in res.updates:
-                update_callback(update)
-            for key in res.deletes:
-                delete_callback(key)
-            for extension in res.extensions:
-                extend_callback(extension)
+            if create_callback:
+                for create in res.creates:
+                    create_callback(create)
+            if update_callback:
+                for update in res.updates:
+                    update_callback(update)
+            if delete_callback:
+                for key in res.deletes:
+                    delete_callback(key)
+            if extend_callback:
+                for extension in res.extensions:
+                    extend_callback(extension)
 
         def create_subscription(topic: HexStr) -> LogsSubscription:
             return LogsSubscription(
-                label=f"Golem Base subscription to topic {topic}",
+                label=f"Golem Base subscription to topic {topic} with label {label}",
                 address=self.golem_base_contract.address,
                 topics=[topic],
                 handler=log_handler,
@@ -569,25 +592,39 @@ class GolemBaseClient:
                 handler_context={},
             )
 
-        async def handle_subscriptions() -> None:
-            await self._ws_client.subscription_manager.subscribe(
-                list(
-                    map(
-                        lambda event: create_subscription(event.topic),
-                        self.golem_base_contract.all_events(),
-                    )
-                ),
+        event_names = []
+        if create_callback:
+            event_names.append("GolemBaseStorageEntityCreated")
+        if update_callback:
+            event_names.append("GolemBaseStorageEntityUpdated")
+        if delete_callback:
+            event_names.append("GolemBaseStorageEntityDeleted")
+        if extend_callback:
+            event_names.extend(
+                [
+                    "GolemBaseStorageEntityBTLExtended",
+                    "GolemBaseStorageEntityBTLExptended",
+                    "GolemBaseStorageEntityTTLExptended",
+                ]
             )
-            # handle subscriptions via configured handlers:
-            await self.ws_client().subscription_manager.handle_subscriptions()
 
-        # Create a long running task to handle subscriptions that we can run on
-        # the asyncio event loop
-        task = asyncio.create_task(handle_subscriptions())
-        self._background_tasks.add(task)
+        events = list(
+            map(
+                lambda event_name: create_subscription(
+                    self.golem_base_contract.get_event_by_name(event_name).topic
+                ),
+                event_names,
+            )
+        )
+        subscription_ids = await self._ws_client.subscription_manager.subscribe(
+            events,
+        )
+        logger.info("Sub ID: %s", subscription_ids)
 
-        def task_done(task: asyncio.Task[None]) -> None:
-            logger.info("Subscription background task done, removing...")
-            self._background_tasks.discard(task)
+        # Start a subscription loop in case there is none running
+        await self._start_subscription_loop()
 
-        task.add_done_callback(task_done)
+        async def unsubscribe() -> None:
+            await self._ws_client.subscription_manager.unsubscribe(subscription_ids)
+
+        return WatchLogsHandle(_unsubscribe=unsubscribe)

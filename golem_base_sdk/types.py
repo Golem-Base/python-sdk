@@ -175,3 +175,18 @@ class QueryEntitiesResult:
 
     entity_key: EntityKey
     storage_value: bytes
+
+
+@dataclass(frozen=True)
+class WatchLogsHandle:
+    """
+    Class returned by `GolemBaseClient.watch_logs`.
+
+    Allows you to unsubscribe from the associated subscription.
+    """
+
+    _unsubscribe: Callable[[], Coroutine[Any, Any, None]]
+
+    async def unsubscribe(self) -> None:
+        """Unsubscribe from this subscription."""
+        await self._unsubscribe()
