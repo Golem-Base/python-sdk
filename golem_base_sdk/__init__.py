@@ -69,6 +69,7 @@ __all__: Sequence[str] = [
     "GolemBaseUpdate",
     "QueryEntitiesResult",
     "UpdateEntityReturnType",
+    "WatchLogsHandle",
     # Exports from .constants
     "GOLEM_BASE_ABI",
     "STORAGE_ADDRESS",
