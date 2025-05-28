@@ -52,8 +52,6 @@ from .types import (
 )
 from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
 
-__version__ = "0.0.3"
-
 __all__: Sequence[str] = [
     # Exports from .types
     "Address",
