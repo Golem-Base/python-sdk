@@ -15,7 +15,7 @@ classifiers = ["Private :: Do Not Upload"]
 
 dependencies = [
     "anyio>=4.9.0",
-    "golem-base-sdk>=0.0.3",
+    "golem-base-sdk",
     "pyxdg>=0.28",
 ]
 
@@ -76,3 +76,6 @@ enabled = true
 live_mode = true
 strict = false
 report_progress = true
+
+[tool.uv.sources]
+golem-base-sdk = { path = "../", editable = true }

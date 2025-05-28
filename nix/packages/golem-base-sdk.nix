@@ -88,6 +88,9 @@ pkgs.python3Packages.buildPythonPackage {
         ]
       );
 
+  virtualenv = pythonSet.mkVirtualEnv "golem-base-sdk-env" workspace.deps.default;
+  virtualenvDev = pythonSet.mkVirtualEnv "golem-base-sdk-env" workspace.deps.all;
+
   self = pythonSet.golem-base-sdk.overrideAttrs (prevAttrs: {
     nativeCheckInputs = [
       pkgs.mypy
@@ -107,17 +110,13 @@ pkgs.python3Packages.buildPythonPackage {
           pyprojectHook = pythonSet.pyprojectDistHook;
         };
 
-        sourceDist =
-          let
-            name = "golem_base_sdk-${wheel.version}";
-          in
-          pkgs.runCommandLocal "source" { }
-            # bash
-            ''
-              mkdir $out
-              ln -s ${src} ${name}
-              GZIP_OPT=-9 tar --dereference -cvzf "$out/${name}.tar.gz" ${name}
-            '';
+        sdist =
+          (self.override {
+            pyprojectHook = pythonSet.pyprojectDistHook;
+          }).overrideAttrs
+            (old: {
+              env.uvBuildType = "sdist";
+            });
       in
       (prevAttrs.passthru or { })
       // {
@@ -125,10 +124,11 @@ pkgs.python3Packages.buildPythonPackage {
           name = "golem-base-sdk";
           paths = [
             wheel
-            sourceDist
+            sdist
           ];
-
         };
+
+        inherit virtualenv virtualenvDev;
       };
   });
 

@@ -432,13 +432,22 @@ wheels = [
 [[package]]
 name = "golem-base-sdk"
 version = "0.0.3"
-source = { registry = ".uv-links" }
+source = { editable = "../" }
 dependencies = [
     { name = "rlp" },
     { name = "web3" },
 ]
-wheels = [
-    { path = "golem_base_sdk-0.0.3-py3-none-any.whl" },
+
+[package.metadata]
+requires-dist = [
+    { name = "rlp", specifier = ">=1.2.0" },
+    { name = "web3", specifier = ">=4.7.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pylsp-mypy", specifier = ">=0.7.0" },
+    { name = "python-lsp-server", specifier = ">=1.12.2" },
 ]
 
 [[package]]
@@ -454,7 +463,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.9.0" },
-    { name = "golem-base-sdk", specifier = ">=0.0.3" },
+    { name = "golem-base-sdk", editable = "../" },
     { name = "pyxdg", specifier = ">=0.28" },
 ]
 

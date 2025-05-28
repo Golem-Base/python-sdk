@@ -1,48 +1,16 @@
 {
   pkgs,
   perSystem,
-  inputs,
   ...
 }:
 
 let
-  inherit (pkgs) lib;
-
-  workspace = inputs.uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./..; };
-
-  overlay = workspace.mkPyprojectOverlay {
-    sourcePreference = "wheel"; # or sourcePreference = "sdist";
-  };
-
-  # Use Python 3.12 from nixpkgs
-  python = pkgs.python312;
-
-  # Construct package set
-  pythonSet =
-    # Use base package set from pyproject.nix builders
-    (pkgs.callPackage inputs.pyproject-nix.build.packages {
-      inherit python;
-    }).overrideScope
-      (
-        lib.composeManyExtensions [
-          inputs.pyproject-build-systems.overlays.default
-          overlay
-        ]
-      );
-
-  virtualenv = pythonSet.mkVirtualEnv "python-sdk-dev-env" workspace.deps.all;
-
-  uv-links = pkgs.symlinkJoin {
-    name = "uv-links";
-    paths = [
-      perSystem.golem-base-sdk.golem-base-sdk.dist
-    ];
-  };
+  inherit (perSystem.self.golem-base-sdk-example.passthru) virtualenvDev;
 in
 
 perSystem.devshell.mkShell {
   packages = [
-    virtualenv
+    virtualenvDev
     pkgs.uv
   ];
 
@@ -55,7 +23,7 @@ perSystem.devshell.mkShell {
     {
       # Force uv to use Python interpreter from venv
       name = "UV_PYTHON";
-      value = "${virtualenv}/bin/python";
+      value = "${virtualenvDev}/bin/python";
     }
     {
       # Prevent uv from downloading managed Python's
@@ -71,8 +39,5 @@ perSystem.devshell.mkShell {
       unset PYTHONPATH
       # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
       export REPO_ROOT=$(git rev-parse --show-toplevel)
-
-      ln -sfn ${uv-links} .uv-links
-      export UV_FIND_LINKS=$(realpath -s .uv-links)
     '';
 }

@@ -1,36 +1,16 @@
 {
   pkgs,
   perSystem,
-  inputs,
   ...
 }:
 
 let
-  inherit (pkgs) lib;
-
-  workspace = inputs.uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./..; };
-
-  overlay = workspace.mkPyprojectOverlay {
-    sourcePreference = "wheel"; # or sourcePreference = "sdist";
-  };
-
-  pythonSet =
-    (pkgs.callPackage inputs.pyproject-nix.build.packages {
-      python = pkgs.python312;
-    }).overrideScope
-      (
-        lib.composeManyExtensions [
-          inputs.pyproject-build-systems.overlays.default
-          overlay
-        ]
-      );
-
-  virtualenv = pythonSet.mkVirtualEnv "python-sdk-dev-env" workspace.deps.all;
+  inherit (perSystem.self.golem-base-sdk.passthru) virtualenvDev;
 in
 
 perSystem.devshell.mkShell {
   packages = [
-    virtualenv
+    virtualenvDev
     pkgs.uv
   ];
 
@@ -43,7 +23,7 @@ perSystem.devshell.mkShell {
     {
       # Force uv to use Python interpreter from venv
       name = "UV_PYTHON";
-      value = "${virtualenv}/bin/python";
+      value = "${virtualenvDev}/bin/python";
     }
     {
       # Prevent uv from downloading managed Python's

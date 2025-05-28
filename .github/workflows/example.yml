@@ -11,13 +11,6 @@ jobs:
   run-python-example:
     runs-on: ubuntu-latest
 
-    #services:
-    #  gb-op-geth:
-    #    image: "quay.io/golemnetwork/gb-op-geth:latest"
-    #    ports:
-    #      - 8545:8545
-    #    options: |
-
     steps:
       - name: Check out the SDK repo
         uses: actions/checkout@v4
@@ -26,7 +19,9 @@ jobs:
         uses: cachix/install-nix-action@v31
 
       - name: Build the example SDK app
-        run: nix build .#golem-base-sdk-example --no-write-lock-file
+        run: >
+          nix build .#golem-base-sdk-example --no-write-lock-file --reference-lock-file
+          ../flake.lock
         working-directory: ./example
 
       - name: Check out the gb-op-geth repo
@@ -56,5 +51,7 @@ jobs:
         working-directory: ./gb-op-geth
 
       - name: Run the example SDK app
-        run: ./result/bin/main --instance local
+        run: >
+          nix develop --no-write-lock-file --reference-lock-file ../flake.lock --command
+          ./result/bin/main --instance local
         working-directory: ./example
