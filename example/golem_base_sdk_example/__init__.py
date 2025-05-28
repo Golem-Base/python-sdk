@@ -217,6 +217,26 @@ Got extend event: %s
         )
 
         await watch_logs_handle.unsubscribe()
+
+        logger.info("""\n
+        *********************************************
+        * Creating an entity to test unsubscribe... *
+        *********************************************
+        """)
+
+        create_receipt = await client.create_entities(
+            [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
+        )
+        entity_key = create_receipt[0].entity_key
+        logger.info("receipt: %s", create_receipt)
+        logger.info("entity count: %s", await client.get_entity_count())
+
+        logger.info("created entity with key %s", entity_key)
+        logger.info("storage value: %s", await client.get_storage_value(entity_key))
+        metadata = await client.get_entity_metadata(entity_key)
+        logger.info("entity metadata: %s", metadata)
+
+        await client.delete_entities([GolemBaseDelete(entity_key)])
     else:
         logger.warning("Could not connect to the API...")
 
