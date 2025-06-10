@@ -79,3 +79,9 @@ report_progress = true
 
 [tool.uv.sources]
 golem-base-sdk = { path = "../", editable = true }
+
+[dependency-groups]
+dev = [
+    "pylsp-mypy>=0.7.0",
+    "python-lsp-server>=1.12.2",
+]
