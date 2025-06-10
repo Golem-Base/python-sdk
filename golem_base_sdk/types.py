@@ -10,6 +10,7 @@ from typing import (
 
 from eth_typing import ChecksumAddress, HexStr
 from web3 import AsyncWeb3
+from web3.types import Wei
 
 
 @dataclass(frozen=True)
@@ -106,21 +107,31 @@ class GolemBaseTransaction:
 
     def __init__(
         self,
+        *,
         creates: Sequence[GolemBaseCreate] | None = None,
         updates: Sequence[GolemBaseUpdate] | None = None,
         deletes: Sequence[GolemBaseDelete] | None = None,
         extensions: Sequence[GolemBaseExtend] | None = None,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ):
         """Initialise the GolemBaseTransaction instance."""
         object.__setattr__(self, "creates", creates or [])
         object.__setattr__(self, "updates", updates or [])
         object.__setattr__(self, "deletes", deletes or [])
         object.__setattr__(self, "extensions", extensions or [])
+        object.__setattr__(self, "gas", gas)
+        object.__setattr__(self, "maxFeePerGas", maxFeePerGas)
+        object.__setattr__(self, "maxPriorityFeePerGas", maxPriorityFeePerGas)
 
     creates: Sequence[GolemBaseCreate]
     updates: Sequence[GolemBaseUpdate]
     deletes: Sequence[GolemBaseDelete]
     extensions: Sequence[GolemBaseExtend]
+    gas: int | None
+    maxFeePerGas: Wei | None
+    maxPriorityFeePerGas: Wei | None
 
 
 @dataclass(frozen=True)

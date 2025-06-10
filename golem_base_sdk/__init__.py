@@ -19,10 +19,10 @@ from typing import (
 from eth_typing import ChecksumAddress, HexStr
 from web3 import AsyncWeb3, WebSocketProvider
 from web3.contract import AsyncContract
-from web3.exceptions import ProviderConnectionError
+from web3.exceptions import ProviderConnectionError, Web3RPCError
 from web3.method import Method, default_root_munger
 from web3.middleware import SignAndSendRawMiddlewareBuilder
-from web3.types import LogReceipt, RPCEndpoint, TxReceipt
+from web3.types import LogReceipt, RPCEndpoint, TxParams, TxReceipt, Wei
 from web3.utils.subscriptions import (
     LogsSubscription,
     LogsSubscriptionContext,
@@ -75,6 +75,8 @@ __all__: Sequence[str] = [
     "STORAGE_ADDRESS",
     # Exports from this file
     "GolemBaseClient",
+    # Re-exports
+    "Wei",
 ]
 
 
@@ -381,37 +383,85 @@ class GolemBaseClient:
     async def create_entities(
         self,
         creates: Sequence[GolemBaseCreate],
+        *,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[CreateEntityReturnType]:
         """Create entities in Golem Base."""
-        return (await self.send_transaction(creates=creates)).creates
+        return (
+            await self.send_transaction(
+                creates=creates,
+                gas=gas,
+                maxFeePerGas=maxFeePerGas,
+                maxPriorityFeePerGas=maxPriorityFeePerGas,
+            )
+        ).creates
 
     async def update_entities(
         self,
         updates: Sequence[GolemBaseUpdate],
+        *,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[UpdateEntityReturnType]:
         """Update entities in Golem Base."""
-        return (await self.send_transaction(updates=updates)).updates
+        return (
+            await self.send_transaction(
+                updates=updates,
+                gas=gas,
+                maxFeePerGas=maxFeePerGas,
+                maxPriorityFeePerGas=maxPriorityFeePerGas,
+            )
+        ).updates
 
     async def delete_entities(
         self,
         deletes: Sequence[GolemBaseDelete],
+        *,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[EntityKey]:
         """Delete entities from Golem Base."""
-        return (await self.send_transaction(deletes=deletes)).deletes
+        return (
+            await self.send_transaction(
+                deletes=deletes,
+                gas=gas,
+                maxFeePerGas=maxFeePerGas,
+                maxPriorityFeePerGas=maxPriorityFeePerGas,
+            )
+        ).deletes
 
     async def extend_entities(
         self,
         extensions: Sequence[GolemBaseExtend],
+        *,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[ExtendEntityReturnType]:
         """Extend the BTL of entities in Golem Base."""
-        return (await self.send_transaction(extensions=extensions)).extensions
+        return (
+            await self.send_transaction(
+                extensions=extensions,
+                gas=gas,
+                maxFeePerGas=maxFeePerGas,
+                maxPriorityFeePerGas=maxPriorityFeePerGas,
+            )
+        ).extensions
 
     async def send_transaction(
         self,
+        *,
         creates: Sequence[GolemBaseCreate] | None = None,
         updates: Sequence[GolemBaseUpdate] | None = None,
         deletes: Sequence[GolemBaseDelete] | None = None,
         extensions: Sequence[GolemBaseExtend] | None = None,
+        gas: int | None = None,
+        maxFeePerGas: Wei | None = None,
+        maxPriorityFeePerGas: Wei | None = None,
     ) -> GolemBaseTransactionReceipt:
         """
         Send a generic transaction to Golem Base.
@@ -420,10 +470,13 @@ class GolemBaseClient:
         extend operations.
         """
         tx = GolemBaseTransaction(
-            creates,
-            updates,
-            deletes,
-            extensions,
+            creates=creates,
+            updates=updates,
+            deletes=deletes,
+            extensions=extensions,
+            gas=gas,
+            maxFeePerGas=maxFeePerGas,
+            maxPriorityFeePerGas=maxPriorityFeePerGas,
         )
         return await self._send_gb_transaction(tx)
 
@@ -541,16 +594,49 @@ class GolemBaseClient:
     async def _send_gb_transaction(
         self, tx: GolemBaseTransaction
     ) -> GolemBaseTransactionReceipt:
-        txhash = await self.http_client().eth.send_transaction(
-            {
-                # https://github.com/pylint-dev/pylint/issues/3162
-                # pylint: disable=no-member
-                "to": STORAGE_ADDRESS.as_address(),
-                "value": AsyncWeb3.to_wei(0, "ether"),
-                "data": rlp_encode_transaction(tx),
-            }
-        )
+        txData: TxParams = {
+            # https://github.com/pylint-dev/pylint/issues/3162
+            # pylint: disable=no-member
+            "to": STORAGE_ADDRESS.as_address(),
+            "value": AsyncWeb3.to_wei(0, "ether"),
+            "data": rlp_encode_transaction(tx),
+        }
+
+        if tx.gas:
+            txData |= {"gas": tx.gas}
+        if tx.maxFeePerGas:
+            txData |= {"maxFeePerGas": tx.maxFeePerGas}
+        if tx.maxPriorityFeePerGas:
+            txData |= {"maxPriorityFeePerGas": tx.maxPriorityFeePerGas}
+
+        txhash = await self.http_client().eth.send_transaction(txData)
         receipt = await self.http_client().eth.wait_for_transaction_receipt(txhash)
+
+        # If we get a receipt and the transaction was failed, we run the same
+        # transaction with eth_call, which will simulate it and get us back the
+        # error that was reported by geth.
+        # Otherwise the error is not actually present in the receipt and so we
+        # don't have something useful to present to the user.
+        # This only happens when the gas price was explicitly provided, since
+        # otherwise there will be a call to eth_estimateGas, which will fail with
+        # the same error message that we would get here (and so we'll never actually
+        # get to submitting the transaction).
+        # The status in the receipt is either 0x0 for failed or 0x1 for success.
+        if not int(receipt["status"]):
+            # This call will lead to an exception, but that's OK, what we want
+            # is to raise a useful exception to the user with an error message.
+            try:
+                await self.http_client().eth.call(txData)
+            except Web3RPCError as e:
+                if e.rpc_response:
+                    raise Exception(
+                        f"Error while processing transaction: {
+                            e.rpc_response['error']['message']
+                        }"
+                    ) from e
+                else:
+                    raise e
+
         return await self._process_golem_base_receipt(receipt)
 
     async def watch_logs(
