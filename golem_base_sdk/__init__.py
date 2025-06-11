@@ -50,7 +50,7 @@ from .types import (
     UpdateEntityReturnType,
     WatchLogsHandle,
 )
-from .utils import parse_legacy_btl_extended_log, rlp_encode_transaction
+from .utils import rlp_encode_transaction
 
 __all__: Sequence[str] = [
     # Exports from .types
@@ -541,15 +541,6 @@ class GolemBaseClient:
                         ),
                     )
                 )
-            # This is only here for backwards compatibility and can be removed
-            # once we undeploy kaolin.
-            case (
-                "GolemBaseStorageEntityBTLExptended"
-                | "GolemBaseStorageEntityTTLExptended"
-            ):
-                extensions.append(parse_legacy_btl_extended_log(log_receipt))
-            case other:
-                raise ValueError(f"Unknown event type: {other}")
 
         return GolemBaseTransactionReceipt(
             creates=creates,
@@ -695,13 +686,7 @@ class GolemBaseClient:
         if delete_callback:
             event_names.append("GolemBaseStorageEntityDeleted")
         if extend_callback:
-            event_names.extend(
-                [
-                    "GolemBaseStorageEntityBTLExtended",
-                    "GolemBaseStorageEntityBTLExptended",
-                    "GolemBaseStorageEntityTTLExptended",
-                ]
-            )
+            event_names.append("GolemBaseStorageEntityBTLExtended")
 
         events = list(
             map(
