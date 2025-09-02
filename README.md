@@ -1,12 +1,12 @@
-# Golem Base
+# GolemDB
 
-This is part of the [Golem Base](https://github.com/Golem-Base) project, which is designed as a Layer2 Network deployed on Ethereum, acting as a gateway to various Layer 3 Database Chains (DB-Chains).
+This is part of the [GolemDB](https://github.com/Golem-Base) project, which is designed as a Layer2 Network deployed on Ethereum, acting as a gateway to various Layer 3 Database Chains (DB-Chains).
 
-> **For an overview of Golem Base, check out our [Litepaper](https://golem-base.io/wp-content/uploads/2025/03/GolemBase-Litepaper.pdf).**
+> **For an overview of GolemDB, check out our [Litepaper](https://golem-base.io/wp-content/uploads/2025/03/GolemDB-Litepaper.pdf).**
 
-# GolemBase SDK for Python
+# GolemDB SDK for Python
 
-This SDK allows you to use [GolemBase](https://github.com/Golem-Base) from Python. It is available [on PyPI](https://pypi.org/project/golem-base-sdk/).
+This SDK allows you to use [GolemDB](https://github.com/Golem-Base) from Python. It is available [on PyPI](https://pypi.org/project/golem-base-sdk/).
 
 We also publish [generated documentation](https://golem-base.github.io/python-sdk/).
 
@@ -50,7 +50,7 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Next, install the GolemBase SDK from PyPI:
+Next, install the GolemDB SDK from PyPI:
 
 ```bash
 pip install golem-base-sdk
@@ -62,9 +62,9 @@ This is a basic Python application that:
 
 - Imports several items from the SDK (`golem_base_sdk`), including:
 
-   * `GolemBaseClient`: A class that creates a client to interact with GolemBase
-   * `GolemBaseCreate`: A class representing a create transaction in GolemBase
-   * `GolemBaseExtend`: A class for extending entity lifetime
+   * `GolemDBClient`: A class that creates a client to interact with GolemDB
+   * `GolemDBCreate`: A class representing a create transaction in GolemDB
+   * `GolemDBExtend`: A class for extending entity lifetime
    * `Annotation`: A class for key-value annotations
 
 - Reads the private key, which it locates using the `xdg` module.
@@ -75,7 +75,7 @@ This is a basic Python application that:
 
 The `main` function demonstrates how to create, extend, and query entities:
 
-- Creates a client object that connects to the GolemBase network (e.g., Kaolin testnet) using `rpc` and `ws` URLs, and your private key.
+- Creates a client object that connects to the GolemDB network (e.g., Kaolin testnet) using `rpc` and `ws` URLs, and your private key.
 
 - Subscribes to log events from the network (create, update, delete, extend).
 

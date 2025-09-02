@@ -1,4 +1,4 @@
-"""GolemBase Python SDK."""
+"""GolemDB Python SDK."""
 
 import argparse
 import asyncio
@@ -7,11 +7,11 @@ import logging.config
 
 from golem_base_sdk import (
     Annotation,
-    GolemBaseClient,
-    GolemBaseCreate,
-    GolemBaseDelete,
-    GolemBaseExtend,
-    GolemBaseUpdate,
+    GolemDBClient,
+    GolemDBCreate,
+    GolemDBDelete,
+    GolemDBExtend,
+    GolemDBUpdate,
     WalletError,
     decrypt_wallet,
 )
@@ -66,7 +66,7 @@ async def run_example(instance: str) -> None:  # noqa: PLR0915
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")
 
-    client = await GolemBaseClient.create(
+    client = await GolemDBClient.create(
         rpc_url=INSTANCE_URLS[instance]["rpc"],
         ws_url=INSTANCE_URLS[instance]["ws"],
         private_key=key_bytes,
@@ -123,7 +123,7 @@ Got extend event: %s
         """)
 
         create_receipt = await client.create_entities(
-            [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
+            [GolemDBCreate(b"hello", 60, [Annotation("app", "demo")], [])]
         )
         entity_key = create_receipt[0].entity_key
         logger.info("receipt: %s", create_receipt)
@@ -146,9 +146,7 @@ Got extend event: %s
             await client.get_entities_to_expire_at_block(metadata.expires_at_block),
         )
 
-        [extend_receipt] = await client.extend_entities(
-            [GolemBaseExtend(entity_key, 60)]
-        )
+        [extend_receipt] = await client.extend_entities([GolemDBExtend(entity_key, 60)])
         logger.info("receipt: %s", extend_receipt)
 
         logger.info(
@@ -175,7 +173,7 @@ Got extend event: %s
             "block number: %s", await client.http_client().eth.get_block_number()
         )
         [update_receipt] = await client.update_entities(
-            [GolemBaseUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
+            [GolemDBUpdate(entity_key, b"hello", 60, [Annotation("app", "demo")], [])]
         )
         logger.info("receipt: %s", update_receipt)
         entity_key = update_receipt.entity_key
@@ -202,7 +200,7 @@ Got extend event: %s
             "block number: %s", await client.http_client().eth.get_block_number()
         )
 
-        receipt = await client.delete_entities([GolemBaseDelete(entity_key)])
+        receipt = await client.delete_entities([GolemDBDelete(entity_key)])
         logger.info("receipt: %s", receipt)
 
         logger.info(
@@ -224,7 +222,7 @@ Got extend event: %s
         """)
 
         create_receipt = await client.create_entities(
-            [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
+            [GolemDBCreate(b"hello", 60, [Annotation("app", "demo")], [])]
         )
         entity_key = create_receipt[0].entity_key
         logger.info("receipt: %s", create_receipt)
@@ -235,7 +233,7 @@ Got extend event: %s
         metadata = await client.get_entity_metadata(entity_key)
         logger.info("entity metadata: %s", metadata)
 
-        await client.delete_entities([GolemBaseDelete(entity_key)])
+        await client.delete_entities([GolemDBDelete(entity_key)])
     else:
         logger.warning("Could not connect to the API...")
 
@@ -244,7 +242,7 @@ Got extend event: %s
 
 def main() -> None:
     """Run the example."""
-    parser = argparse.ArgumentParser(description="GolemBase Python SDK Example")
+    parser = argparse.ArgumentParser(description="GolemDB Python SDK Example")
     parser.add_argument(
         "--instance",
         choices=INSTANCE_URLS.keys(),

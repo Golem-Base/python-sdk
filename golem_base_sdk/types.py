@@ -1,4 +1,4 @@
-"""Golem Base SDK Types."""
+"""GolemDB SDK Types."""
 
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -64,8 +64,8 @@ class Annotation(Generic[V]):
 
 
 @dataclass(frozen=True)
-class GolemBaseCreate:
-    """Class to represent a create operation in Golem Base."""
+class GolemDBCreate:
+    """Class to represent a create operation in Golem DB."""
 
     data: bytes
     btl: int
@@ -74,8 +74,8 @@ class GolemBaseCreate:
 
 
 @dataclass(frozen=True)
-class GolemBaseUpdate:
-    """Class to represent an update operation in Golem Base."""
+class GolemDBUpdate:
+    """Class to represent an update operation in Golem DB."""
 
     entity_key: EntityKey
     data: bytes
@@ -85,45 +85,45 @@ class GolemBaseUpdate:
 
 
 @dataclass(frozen=True)
-class GolemBaseDelete:
-    """Class to represent a delete operation in Golem Base."""
+class GolemDBDelete:
+    """Class to represent a delete operation in Golem DB."""
 
     entity_key: EntityKey
 
 
 @dataclass(frozen=True)
-class GolemBaseExtend:
-    """Class to represent a BTL extend operation in Golem Base."""
+class GolemDBExtend:
+    """Class to represent a BTL extend operation in Golem DB."""
 
     entity_key: EntityKey
     number_of_blocks: int
 
 
 @dataclass(frozen=True)
-class GolemBaseTransaction:
+class GolemDBTransaction:
     """
-    Class to represent a transaction in Golem Base.
+    Class to represent a transaction in Golem DB.
 
     A transaction consist of one or more
-    `GolemBaseCreate`,
-    `GolemBaseUpdate`,
-    `GolemBaseDelete` and
-    `GolemBaseExtend`
+    `GolemDBCreate`,
+    `GolemDBUpdate`,
+    `GolemDBDelete` and
+    `GolemDBExtend`
     operations.
     """
 
     def __init__(
         self,
         *,
-        creates: Sequence[GolemBaseCreate] | None = None,
-        updates: Sequence[GolemBaseUpdate] | None = None,
-        deletes: Sequence[GolemBaseDelete] | None = None,
-        extensions: Sequence[GolemBaseExtend] | None = None,
+        creates: Sequence[GolemDBCreate] | None = None,
+        updates: Sequence[GolemDBUpdate] | None = None,
+        deletes: Sequence[GolemDBDelete] | None = None,
+        extensions: Sequence[GolemDBExtend] | None = None,
         gas: int | None = None,
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ):
-        """Initialise the GolemBaseTransaction instance."""
+        """Initialise the GolemDBTransaction instance."""
         object.__setattr__(self, "creates", creates or [])
         object.__setattr__(self, "updates", updates or [])
         object.__setattr__(self, "deletes", deletes or [])
@@ -132,10 +132,10 @@ class GolemBaseTransaction:
         object.__setattr__(self, "maxFeePerGas", maxFeePerGas)
         object.__setattr__(self, "maxPriorityFeePerGas", maxPriorityFeePerGas)
 
-    creates: Sequence[GolemBaseCreate]
-    updates: Sequence[GolemBaseUpdate]
-    deletes: Sequence[GolemBaseDelete]
-    extensions: Sequence[GolemBaseExtend]
+    creates: Sequence[GolemDBCreate]
+    updates: Sequence[GolemDBUpdate]
+    deletes: Sequence[GolemDBDelete]
+    extensions: Sequence[GolemDBExtend]
     gas: int | None
     maxFeePerGas: Wei | None
     maxPriorityFeePerGas: Wei | None
@@ -143,7 +143,7 @@ class GolemBaseTransaction:
 
 @dataclass(frozen=True)
 class CreateEntityReturnType:
-    """The return type of a Golem Base create operation."""
+    """The return type of a GolemDB create operation."""
 
     expiration_block: int
     entity_key: EntityKey
@@ -151,7 +151,7 @@ class CreateEntityReturnType:
 
 @dataclass(frozen=True)
 class UpdateEntityReturnType:
-    """The return type of a Golem Base update operation."""
+    """The return type of a GolemDB update operation."""
 
     expiration_block: int
     entity_key: EntityKey
@@ -159,7 +159,7 @@ class UpdateEntityReturnType:
 
 @dataclass(frozen=True)
 class ExtendEntityReturnType:
-    """The return type of a Golem Base extend operation."""
+    """The return type of a GolemDB extend operation."""
 
     old_expiration_block: int
     new_expiration_block: int
@@ -167,8 +167,8 @@ class ExtendEntityReturnType:
 
 
 @dataclass(frozen=True)
-class GolemBaseTransactionReceipt:
-    """The return type of a Golem Base transaction."""
+class GolemDBTransactionReceipt:
+    """The return type of a GolemDB transaction."""
 
     creates: Sequence[CreateEntityReturnType]
     updates: Sequence[UpdateEntityReturnType]
@@ -189,7 +189,7 @@ class EntityMetadata:
 
 @dataclass(frozen=True)
 class QueryEntitiesResult:
-    """A class representing the return value of a Golem Base query."""
+    """A class representing the return value of a GolemDB query."""
 
     entity_key: EntityKey
     storage_value: bytes
@@ -198,7 +198,7 @@ class QueryEntitiesResult:
 @dataclass(frozen=True)
 class WatchLogsHandle:
     """
-    Class returned by `GolemBaseClient.watch_logs`.
+    Class returned by `GolemDBClient.watch_logs`.
 
     Allows you to unsubscribe from the associated subscription.
     """
