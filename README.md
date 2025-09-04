@@ -8,6 +8,10 @@ This is part of the [Golem Base](https://github.com/Golem-Base) project, which i
 
 This SDK allows you to use [GolemBase](https://github.com/Golem-Base) from Python. It is available [on PyPI](https://pypi.org/project/golem-base-sdk/).
 
+**Find the [API documentation here](https://golem-base.github.io/documentation/python/api/api/).**
+
+**Need a quickstart guide? [We have one here](https://golem-base.github.io/documentation/overview/quickstart/).**
+
 We also publish [generated documentation](https://golem-base.github.io/python-sdk/).
 
 The repo also contains an example application to showcase how you can use this SDK.
