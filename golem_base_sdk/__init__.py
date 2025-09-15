@@ -364,7 +364,7 @@ class GolemBaseROClient:
         return await self.http_client().get_storage_value(entity_key)
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
-        """Checks whether the instance is connected to a remote op-geth node.
+        """Get the metadata of the given entity..
 
         Args:
             entity_key (EntityKey): The key of the entity to query.
@@ -377,7 +377,7 @@ class GolemBaseROClient:
     async def get_entities_to_expire_at_block(
         self, block_number: int
     ) -> Sequence[EntityKey]:
-        """Checks whether the instance is connected to a remote op-geth node.
+        """Get all entities that will expire at the given block.
 
         Args:
             block_number (int): The block number being queried.
@@ -388,7 +388,7 @@ class GolemBaseROClient:
         return await self.http_client().get_entities_to_expire_at_block(block_number)
 
     async def get_entity_count(self) -> int:
-        """Checks whether the instance is connected to a remote op-geth node.
+        """Get the total entity count in Golem Base.
 
         Returns:
             int: The total number of entities stored.
