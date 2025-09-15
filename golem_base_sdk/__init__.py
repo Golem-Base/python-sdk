@@ -221,10 +221,30 @@ class GolemBaseROClient:
 
     @staticmethod
     async def create_ro_client(rpc_url: str, ws_url: str) -> "GolemBaseROClient":
-        """
-        Create a `GolemBaseClient` instance.
+        """Constructs a new GolemBaseClient in Read-Only mode.
 
-        This is the preferred method to create an instance.
+        This mode provides operations only for reading information about entities. The returned instance is of the special class GolemBaseROClient, which is a base class of GolemBaseClient.
+
+        Args:
+            rpc_url (str): The RPC URL for the remote golem-base op-geth node.
+            ws_url (str): The WS URL for the remote golem-base op-geth node.
+
+        Returns:
+            GolemBaseROClient: An instance of GolemBaseROClient.
+
+        Example:
+            ```python
+            import asyncio
+            from golem_base_sdk import GolemBaseClient
+
+            async def main() -> None:
+                client = await GolemBaseClient.create_ro_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545')
+                print(await client.get_entity_count())
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
         """
         return GolemBaseROClient(
             rpc_url, await GolemBaseROClient._create_ws_client(ws_url)
@@ -290,58 +310,132 @@ class GolemBaseROClient:
             )
 
     def http_client(self) -> GolemBaseHttpClient:
-        """Get the underlying web3 http client."""
+        """Returns the internal instance of GolemBaseHttpClient.
+
+        This class extends Web3.py's AsyncWeb3 with Golem-specific methods.
+
+        Returns:
+            GolemBaseHttpClient: The internal GolemBaseHttpClient instance.
+        """
+        
         return self._http_client
 
     def ws_client(self) -> AsyncWeb3:
-        """Get the underlying web3 websocket client."""
+        """Returns the internal AsyncWeb3 instance for the websocket provider.
+
+        When a GolemBaseROClient instance is created, a web socket (ws) provider in the form of an AsyncWeb3 instance is first created and passed into the constructor. This function returns that instance.
+
+        Returns:
+            AsyncWeb3: The internal AsyncWeb3 instance.
+        """
         return self._ws_client
 
     async def is_connected(self) -> bool:
-        """Check whether the client's underlying http client is connected."""
+        """Returns whether the client's underlying http client is connected.
+        
+        Returns:
+            bool: Whether the client is connected.
+
+        """
         return cast(bool, await self.http_client().is_connected())  # type: ignore[redundant-cast]
 
     async def disconnect(self) -> None:
-        """
-        Disconnect this client.
+        """Disconnect this client.
 
-        this method disconnects both the underlying http and ws clients and
+        Disconnects both the underlying http and ws clients and
         unsubscribes from all subscriptions.
+
+        Returns:
+            None
         """
         await self.http_client().provider.disconnect()
         await self.ws_client().subscription_manager.unsubscribe_all()
         await self.ws_client().provider.disconnect()
 
     async def get_storage_value(self, entity_key: EntityKey) -> bytes:
-        """Get the storage value stored in the given entity."""
+        """Gets the value (payload) stored in the given entity.
+
+        Args:
+            entity_key (EntityKey): The key of the entity to query.
+
+        Returns:
+            bytes: The raw bytes of the storage value.
+        """
         return await self.http_client().get_storage_value(entity_key)
 
     async def get_entity_metadata(self, entity_key: EntityKey) -> EntityMetadata:
-        """Get the metadata of the given entity."""
+        """Checks whether the instance is connected to a remote op-geth node.
+
+        Args:
+            entity_key (EntityKey): The key of the entity to query.
+
+        Returns:
+            EntityMetadata: The meta data stored in an EntityMetadata structure.
+        """
         return await self.http_client().get_entity_metadata(entity_key)
 
     async def get_entities_to_expire_at_block(
         self, block_number: int
     ) -> Sequence[EntityKey]:
-        """Get all entities that will expire at the given block."""
+        """Checks whether the instance is connected to a remote op-geth node.
+
+        Args:
+            block_number (int): The block number being queried.
+
+        Returns:
+            Sequence[EntityKey]: A sequence of entity keys.
+        """
         return await self.http_client().get_entities_to_expire_at_block(block_number)
 
     async def get_entity_count(self) -> int:
-        """Get the total entity count in Golem Base."""
+        """Checks whether the instance is connected to a remote op-geth node.
+
+        Returns:
+            int: The total number of entities stored.
+        """
         return await self.http_client().get_entity_count()
 
     async def get_all_entity_keys(self) -> Sequence[EntityKey]:
-        """Get all entity keys in Golem Base."""
+        """Returns the keys for all the entities.
+
+        Returns:
+            Sequence[EntityKey]: A sequence of all entity keys.
+
+        Example:
+            ```python
+            import asyncio
+            from golem_base_sdk import GolemBaseClient
+
+            async def main() -> None:
+                client = await GolemBaseClient.create_ro_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545')
+                print(await client.get_all_entity_keys())
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
+        """
         return await self.http_client().get_all_entity_keys()
 
     async def get_entities_of_owner(
         self, owner: ChecksumAddress
     ) -> Sequence[EntityKey]:
-        """Get all the entities owned by the given address."""
+        """Returns all the keys for the current owner.
+
+        Returns:
+            Sequence[EntityKey]: A sequence of entity keys.
+        """
         return await self.http_client().get_entities_of_owner(owner)
 
     async def query_entities(self, query: str) -> Sequence[QueryEntitiesResult]:
-        """Get all entities that satisfy the given Golem Base query."""
+        """Queries entities based on their key-value annotation pairs.
+
+        Args:
+            query (str): The query expression.
+
+        Returns:
+            Sequence[QueryEntitiesResult]: The entities that match the query expression.
+        """
         return await self.http_client().query_entities(query)
 
     async def watch_logs(
@@ -559,10 +653,34 @@ class GolemBaseClient(GolemBaseROClient):
     async def create_rw_client(
         rpc_url: str, ws_url: str, private_key: bytes
     ) -> "GolemBaseClient":
-        """
-        Create a read-write Golem Base client.
+        """Constructs a new GolemBaseClient in Read-Write mode.
 
-        This is the preferred method to create an instance.
+        Provides operations for reading, creating, modifying, and deleting entities.
+
+        Args:
+            rpc_url (str): The RPC URL for the remote golem-base op-geth node.
+            ws_url (str): The WS URL for the remote golem-base op-geth node.
+            private_key (bytes): The private key read from a private.key file.
+
+        Returns:
+            GolemBaseClient: An instance of GolemBaseClient.
+
+        Example:
+            ```python
+            import asyncio
+            from golem_base_sdk import GolemBaseClient
+
+            async def main() -> None:
+                with open('/home/freckleface/.config/golembase/private.key', 'rb') as private_key_file:
+                    key_bytes = private_key_file.read(32)
+
+                client = await GolemBaseClient.create_rw_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545', private_key=key_bytes)
+                print(client.get_account_address())
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
         """
         return GolemBaseClient(
             rpc_url, await GolemBaseROClient._create_ws_client(ws_url), private_key
@@ -599,7 +717,33 @@ class GolemBaseClient(GolemBaseROClient):
         logger.debug("Using account: %s", self.account.address)
 
     def get_account_address(self) -> ChecksumAddress:
-        """Get the address associated with the private key of this client."""
+        """Returns the address associated with the private key of this client.
+
+        Note:
+            This function does not make a call to a node and is synchronous. As such, do not precede its call with `await`.
+
+        Returns:
+            ChecksumAddress: A type defined in `eth_typing` representing an address.
+
+        Example:
+            This example calls get_account_address and prints the result. Replace `/path/to` with the path to your private.key file.
+
+            ```python
+            import asyncio
+            from golem_base_sdk import GolemBaseClient
+
+            async def main() -> None:
+                with open('/path/to/private.key', 'rb') as private_key_file:
+                    key_bytes = private_key_file.read(32)
+
+                client = await GolemBaseClient.create_rw_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545', private_key=key_bytes)
+                print(client.get_account_address())
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
+        """
         return cast(ChecksumAddress, self.account.address)
 
     async def create_entities(
@@ -610,7 +754,67 @@ class GolemBaseClient(GolemBaseROClient):
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[CreateEntityReturnType]:
-        """Create entities in Golem Base."""
+        """Creates one or more entities.
+
+        Args:
+            creates (Sequence[GolemBaseCreate]): A sequence of `GolemBaseCreate` instances, each representing an individual entity to create.
+            gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+            maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+            maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
+
+        Returns:
+            Sequence[CreateEntityReturnType]: A sequence of `CreateEntityReturnType` instances.
+
+        Each instance of `CreateEntityReturnType` holds the block number for expiration and the hash of the created entity. To extract the hash as a hex string, call `as_hex_string()`.
+
+        Example 1: Creating a single entity
+            ```python
+            import asyncio
+            from golem_base_sdk import Annotation, GolemBaseClient, GolemBaseCreate
+
+            async def main() -> None:
+                with open('/path/to/private.key', 'rb') as private_key_file:
+                    key_bytes = private_key_file.read(32)
+
+                client = await GolemBaseClient.create_rw_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545', private_key=key_bytes)
+                create_receipt = await client.create_entities(
+                    [GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], [])]
+                )
+                print(f"Entity hash: {create_receipt[0].entity_key.as_hex_string()}")
+                print(f"Expires at: {create_receipt[0].expiration_block}")
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
+
+        Example 2: Creating multiple entities
+            ```python
+            import asyncio
+            from golem_base_sdk import Annotation, GolemBaseClient, GolemBaseCreate
+
+            async def main() -> None:
+                with open('/path/to/private.key', 'rb') as private_key_file:
+                    key_bytes = private_key_file.read(32)
+
+                client = await GolemBaseClient.create_rw_client(rpc_url='http://localhost:8545', ws_url='ws://localhost:8545', private_key=key_bytes)
+                create_receipts = await client.create_entities([
+                    GolemBaseCreate(b"hello", 60, [Annotation("app", "demo")], []),
+                    GolemBaseCreate(b"Greetings!", 60,
+                        [Annotation("name", "greeting"), Annotation("type", "app")],
+                        [Annotation("version", 20)]
+                    )
+                ])
+                for receipt in create_receipts:
+                    print(f"Entity hash: {receipt.entity_key.as_hex_string()}")
+                    print(f"Expires at: {receipt.expiration_block}")
+                    print()
+                await client.disconnect()
+
+            if __name__ == "__main__":
+                asyncio.run(main())
+            ```
+        """
         return (
             await self.send_transaction(
                 creates=creates,
@@ -628,7 +832,18 @@ class GolemBaseClient(GolemBaseROClient):
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[UpdateEntityReturnType]:
-        """Update entities in Golem Base."""
+        ### .update_entities
+        """Updates one or more entities.
+
+        Args:
+            updates (Sequence[GolemBaseUpdate]): A sequence of `GolemBaseUpdate` instances, each representing an individual entity to update.
+            gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+            maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+            maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
+
+        Returns:
+            Sequence[UpdateEntityReturnType]: A sequence of `UpdateEntityReturnType` instances.
+        """
         return (
             await self.send_transaction(
                 updates=updates,
@@ -646,7 +861,17 @@ class GolemBaseClient(GolemBaseROClient):
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[EntityKey]:
-        """Delete entities from Golem Base."""
+        """Deletes a set of entities.
+
+        Args:
+            deletes (Sequence[GolemBaseDelete]): A sequence of `GolemBaseDelete` instances, each representing an individual entity to delete.
+            gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+            maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+            maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
+
+        Returns:
+            Sequence[EntityKey]: A sequence of `EntityKey` instances.
+        """
         return (
             await self.send_transaction(
                 deletes=deletes,
@@ -664,7 +889,17 @@ class GolemBaseClient(GolemBaseROClient):
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ) -> Sequence[ExtendEntityReturnType]:
-        """Extend the BTL of entities in Golem Base."""
+        """Extends the blocks-to-live for a set of entities.
+
+        Args:
+            extensions (Sequence[GolemBaseExtend]): A sequence of `GolemBaseExtend` instances, each representing an individual entity to extend.
+            gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+            maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+            maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
+
+        Returns:
+            Sequence[ExtendEntityReturnType]: A sequence of `ExtendEntityReturnType` instances.
+        """
         return (
             await self.send_transaction(
                 extensions=extensions,
@@ -685,11 +920,18 @@ class GolemBaseClient(GolemBaseROClient):
         maxFeePerGas: Wei | None = None,
         maxPriorityFeePerGas: Wei | None = None,
     ) -> GolemBaseTransactionReceipt:
-        """
-        Send a generic transaction to Golem Base.
+        """Sends a transaction consisting of any number of creates, updates, deletes, and extensions.
 
-        This transaction can contain multiple create, update, delete and
-        extend operations.
+        This is a general function for use when sending multiple types of operations at once.
+
+        Args:
+            creates (Sequence[GolemBaseCreate] | None, optional): A sequence of `GolemBaseCreate` instances. Defaults to None.
+            updates (Sequence[GolemBaseUpdate] | None, optional): A sequence of `GolemBaseUpdate` instances. Defaults to None.
+            deletes (Sequence[GolemBaseDelete] | None, optional): A sequence of `GolemBaseDelete` instances. Defaults to None.
+            extensions (Sequence[GolemBaseExtend] | None, optional): A sequence of `GolemBaseExtend` instances. Defaults to None.
+            gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+            maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+            maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
         """
         tx = GolemBaseTransaction(
             creates=creates,

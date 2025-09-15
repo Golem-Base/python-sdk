@@ -46,7 +46,18 @@ Address = NewType("Address", GenericBytes)
 
 @dataclass(frozen=True)
 class Annotation[V]:
-    """Class to represent generic annotations."""
+    """Helper class for constructing annotations. Represents an annotation key-value pair to attach to an entity.
+
+    This is a generic class that can be used to create annotations for entities,
+    such as `Annotation[str]` or `Annotation[int]`.
+
+    Type Parameters:
+        V: The value type (commonly `str` or `int`).
+
+    Use:
+        Include as `string_annotations` (Annotation[str]) or `numeric_annotations` (Annotation[int]) when creating or updating entities.
+    """
+    
 
     key: str
     value: V
@@ -58,7 +69,21 @@ class Annotation[V]:
 
 @dataclass(frozen=True)
 class GolemBaseCreate:
-    """Class to represent a create operation in Golem Base."""
+    """Helper class for creating entities.
+
+    An instance of this class specifies the data to fill an entity with. You can
+    pass an array of these instances into the `create_entities` method to create
+    one or more entities.
+
+    Members:
+        data (bytes): The raw data or payload to be saved.
+        ttl (int): The number of blocks to live.
+        string_annotations (Sequence[Annotation[str]]): Key-value pairs where the value is a string.
+        numeric_annotations (Sequence[Annotation[int]]): Key-value pairs where the value is a number.
+
+    Note:
+        `ttl` will be deprecated and replaced with `btl` (for "blocks to live").
+    """
 
     data: bytes
     ttl: int
@@ -68,7 +93,22 @@ class GolemBaseCreate:
 
 @dataclass(frozen=True)
 class GolemBaseUpdate:
-    """Class to represent an update operation in Golem Base."""
+    """Helper class for updating existing entities.
+
+    An instance of this class specifies the data to replace an existing entity with.
+    You can pass an array of these instances into the `update_entities` method to
+    update one or more entities.
+
+    Members:
+        entity_key (EntityKey): The key of the existing entity to update.
+        data (bytes): The raw data or payload to be saved.
+        ttl (int): The number of blocks to live.
+        string_annotations (Sequence[Annotation[str]]): Key-value pairs where the value is a string.
+        numeric_annotations (Sequence[Annotation[int]]): Key-value pairs where the value is a number.
+
+    Note:
+        `ttl` will be deprecated and replaced with `btl` (for "blocks to live").
+    """
 
     entity_key: EntityKey
     data: bytes
@@ -79,14 +119,31 @@ class GolemBaseUpdate:
 
 @dataclass(frozen=True)
 class GolemBaseDelete:
-    """Class to represent a delete operation in Golem Base."""
+    """Helper class for deleting entities.
+
+    An instance of this class specifies the key of an entity to delete. You can
+    pass an array of these instances into the `delete_entities` method to delete
+    one or more entities.
+
+    Members:
+        entity_key (EntityKey): The key of the existing entity to update.
+    """
 
     entity_key: EntityKey
 
 
 @dataclass(frozen=True)
 class GolemBaseExtend:
-    """Class to represent a BTL extend operation in Golem Base."""
+    """Helper class for extending the time to live for existing entities.
+
+    An instance of this class specifies the key of an entity to extend and the
+    number of blocks to extend it by. You can pass an array of these instances
+    into the `extend_entities` method.
+
+    Members:
+        entity_key (EntityKey): The key of the existing entity to update.
+        number_of_blocks (int): The number of blocks by which to extend the entity's time to live.
+    """
 
     entity_key: EntityKey
     number_of_blocks: int
@@ -94,15 +151,20 @@ class GolemBaseExtend:
 
 @dataclass(frozen=True)
 class GolemBaseTransaction:
-    """
-    Class to represent a transaction in Golem Base.
+    """Represents a single transaction to pass to an op-geth node.
 
-    A transaction consist of one or more
-    `GolemBaseCreate`,
-    `GolemBaseUpdate`,
-    `GolemBaseDelete` and
-    `GolemBaseExtend`
-    operations.
+    This class can include any combination of creates, deletes, updates, and
+    extensions, each as an array of size zero or more.
+
+    Members:
+        creates (Sequence[GolemBaseCreate] | None = None, optional): A list of entity creation structures. 
+        updates (Sequence[GolemBaseUpdate] | None = None, optional): A list of entity update structures.
+        deletes (Sequence[GolemBaseDelete] | None = None, optional): A list of entity delete structures.
+        extensions (Sequence[GolemBaseExtend] | None = None, optional): A list of entity block extension structures.
+        gas (int | None, optional): The maximum amount of gas to spend. Defaults to None.
+        maxFeePerGas (Wei | None, optional): The amount of Wei to spend per gas unit. Defaults to None.
+        maxPriorityFeePerGas (Wei | None, optional): The tip amount. Defaults to None.
+
     """
 
     def __init__(
@@ -136,7 +198,16 @@ class GolemBaseTransaction:
 
 @dataclass(frozen=True)
 class CreateEntityReturnType:
-    """The return type of a Golem Base create operation."""
+    """Represents the return type of `create_entities`.
+
+    It consists of the key of the created entity and the expiration block number.
+    The `create_entities` method returns an array of `CreateEntityReturnType` instances,
+    one for each entity created.
+
+    Members:
+        entity_key (EntityKey): The key assigned to the created entity.
+        expiration_block (int): The block number when the entity will expire.
+    """
 
     expiration_block: int
     entity_key: EntityKey
@@ -144,7 +215,14 @@ class CreateEntityReturnType:
 
 @dataclass(frozen=True)
 class UpdateEntityReturnType:
-    """The return type of a Golem Base update operation."""
+    """Represents the return type of `update_entity`.
+
+    It consists of the key of the updated entity and the expiration block.
+
+    Members:
+        entity_key (EntityKey): The key assigned to the created entity.
+        expiration_block (int): The block number when the entity will expire.
+    """
 
     expiration_block: int
     entity_key: EntityKey
@@ -152,7 +230,16 @@ class UpdateEntityReturnType:
 
 @dataclass(frozen=True)
 class ExtendEntityReturnType:
-    """The return type of a Golem Base extend operation."""
+    """Represents the return type of `extend_entity`.
+
+    It consists of the key of the extended entity, the old expiration block, and
+    the new expiration block.
+
+    Members:
+        entity_key (EntityKey): The key assigned to the created entity.
+        old_expiration_block (int): The expiration block before the update.
+        new_expiration_block (int): The new expiration block after the update.
+    """
 
     old_expiration_block: int
     new_expiration_block: int
@@ -161,7 +248,14 @@ class ExtendEntityReturnType:
 
 @dataclass(frozen=True)
 class GolemBaseTransactionReceipt:
-    """The return type of a Golem Base transaction."""
+    """The return type of a Golem Base transaction.
+    
+    Members:
+        creates (Sequence[CreateEntityReturnType]): A list of entity creation return receipts.
+        updates (Sequence[UpdateEntityReturnType]): A list of entity update return receipts.
+        extensions (Sequence[ExtendEntityReturnType]): A list of entity extensinon return receipts.
+        deletes (Sequence[EntityKey]):  A list of entity delete return receipts.    
+    """
 
     creates: Sequence[CreateEntityReturnType]
     updates: Sequence[UpdateEntityReturnType]
@@ -171,8 +265,19 @@ class GolemBaseTransactionReceipt:
 
 @dataclass(frozen=True)
 class EntityMetadata:
-    """A class representing entity metadata."""
+    ## class EntityMetadata
+    """Represents the metadata for an entity.
 
+    An instance of this class is returned by the `get_entity_metadata` function.
+
+    Members:
+        entity_key (EntityKey): The key (hash) of the entity.
+        owner (Address): The owner of the entity.
+        expires_at_block (int): The block at which this entity will expire.
+        string_annotations (Sequence[Annotation[str]]): A list of string annotations in key/value format.
+        numeric_annotations (Sequence[Annotation[int]]): A list of numeric annotations in key/value format.
+
+    """
     entity_key: EntityKey
     owner: Address
     expires_at_block: int
